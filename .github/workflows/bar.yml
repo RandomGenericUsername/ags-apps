@@ -1,0 +1,38 @@
+name: bar
+
+# Per-app CI for the bar (REQ-001): the bar's typecheck + tests run here.
+#
+# Split by runner capability, mirroring dotfiles-v3's gates.yml precedent:
+# `ags-test` needs only Node + tsc (stock `ubuntu-latest` runner), while
+# `bar-typecheck` needs `ags` on PATH plus the Astal/GIR libraries and
+# generates ~49 MB of machine-specific .d.ts — so it runs on a
+# `[self-hosted, linux]` runner that HAS the desktop stack. Listing it on a
+# stock runner would not make it stricter, only red on a missing binary.
+#
+# TRIGGER. This repository's default branch is `main`; PRs from any branch
+# are still checked via `pull_request` (unfiltered).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ags-test:
+    name: ags-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run the bar pure-module unit tests
+        run: make ags-test
+
+  bar-typecheck:
+    name: bar-typecheck
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck the bar tree
+        run: make bar-typecheck

@@ -1,6 +1,6 @@
 {
   "//": [
-    "Typecheck config for the bar tree (dotfiles/config/ags). HAND-WRITTEN AND COMMITTED.",
+    "Typecheck config for the bar tree (ags-apps/bar). HAND-WRITTEN AND COMMITTED.",
     "",
     "WHY THIS GATE EXISTS: `ags bundle` TRANSPILES WITHOUT TYPE CHECKING.",
     "Verified twice: `const bad: number = \"string\"` bundles exit 0 (capture",
@@ -12,12 +12,10 @@
     "runs against and OVERWRITES it on every run, so this file deliberately",
     "uses a non-colliding name. Do not rename it to tsconfig.json.",
     "",
-    "The bar reuses the capture tool's GENERATED declarations",
-    "(../../../src/gui-tools/capture-tool/@girs/index.d.ts + env.d.ts) rather",
-    "than generating its own 49 MB copy: the GIR modules describe THIS machine,",
-    "not the consuming tree, so the content is identical. This does couple the",
-    "bar typecheck to `make capture-types` having run once — the Makefile gate",
-    "declares that dependency explicitly instead of hiding it.",
+    "The bar generates its OWN declarations in-tree (`make bar-types` runs",
+    "`ags types -d bar -u`, writing bar/@girs/ + bar/env.d.ts): the GIR modules",
+    "describe THIS machine, not the consuming tree. The Makefile gate declares",
+    "that dependency explicitly instead of hiding it.",
     "",
     "Generated @girs/ carries ~47 duplicate GTK3/GTK4 identifier clashes (not",
     "our code, not our bug): skipLibCheck, same as capture. `lib` needs",
@@ -70,12 +68,13 @@
     "**/*.ts",
     "**/*.tsx",
 
-    // REQUIRED (same reason as capture): naming the GIR index pulls the whole
+    // REQUIRED: naming the GIR index pulls the whole
     // transitive closure in. Without it every `gi://...` import is unresolved.
-    "../../../src/gui-tools/capture-tool/@girs/index.d.ts",
+    // (`make bar-types` generates these from THIS host's GTK/Astal install.)
+    "@girs/index.d.ts",
 
     // Generated ambient declarations for `*.css` (the `style` imports).
-    "../../../src/gui-tools/capture-tool/env.d.ts"
+    "env.d.ts"
   ],
   // `tests/` is a SEPARATE tsc project with its OWN config and its OWN gate.
   // `tests/tsconfig.tests.json` owns these files and `make ags-test` runs it;
