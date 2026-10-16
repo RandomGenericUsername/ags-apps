@@ -7,8 +7,8 @@ lane: 2
 links:
   openspec: bar-thin-consumer
   bmad: none
-worktree: none
-branch: none
+worktree: .worktrees/bar1/
+branch: ticket/bar1-thin-consumer
 ---
 
 # Bar as a thin platform consumer + publish + CI

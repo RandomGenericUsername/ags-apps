@@ -23,3 +23,24 @@ openspec/worksets/
 
 # worktrees (ticket harness)
 .worktrees/
+
+# Bar typecheck artifacts. `ags types -u` regenerates all of these from the
+# GTK/Astal libraries installed on THIS machine: @girs/ is ~49 MB of .d.ts,
+# env.d.ts holds the ambient CSS declarations, tsconfig.json is the colliding
+# config it overwrites (the committed one is tsconfig.bar.json), and
+# node_modules/ holds symlinks into /usr/share/ags/js plus the
+# node_modules/ags-platform dev shortcut. They describe the local toolchain,
+# not the repo, so they are rebuilt on demand via `make bar-types` /
+# `make ags-platform-dev` and never committed.
+/bar/node_modules/
+/bar/tsconfig.json
+/bar/@girs/
+/bar/env.d.ts
+/bar/tests/node_modules/
+
+# The dev-time ags-platform checkout `make ags-platform-dev` fetches on demand
+# (pinned, shallow, anonymous). Deliberately OUTSIDE node_modules: Node refuses
+# to type-strip `.ts` under a real node_modules dir, but realpaths a symlink,
+# so the checkout must live here. A committed copy of the consumed unit would
+# defeat AD-17 (consume the published unit, not a vendored one).
+/.dev/
