@@ -1,4 +1,8 @@
-.PHONY: help typecheck test bar-types ags-platform-dev bar-typecheck ags-test ags-test-deps gates-ci
+.PHONY: help typecheck test bar-types ags-platform-dev bar-typecheck ags-test ags-test-deps gates-ci \
+	icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity audio-mock-parity \
+	ags-symbol-check audio-core-test audio-presentation-test pipewire-adapter-test \
+	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
+	audio-panel-gates
 
 BAR_DIR := bar
 AGS_TESTS := $(BAR_DIR)/tests
@@ -22,6 +26,13 @@ help:
 	@echo "gates-ci        Stock-runner subset (== CI stock jobs)"
 	@echo "typecheck       Alias for bar-typecheck"
 	@echo "test            Alias for ags-test"
+	@echo ""
+	@echo "re-homed bar guards (ticket/bar7-rehome-guards):"
+	@echo "icons-json-drift        bar/icons.json == role projection of icons.yaml"
+	@echo "wifi/bluetooth/battery/audio-mock-parity   mock<->code class parity"
+	@echo "ags-symbol-check        import/export + undefined-call check over bar/"
+	@echo "audio-panel-gates       audio unit suites + parity + symbol + bar-typecheck"
+	@echo "audio-*-test            individual audio panel suites"
 
 typecheck: bar-typecheck
 
@@ -151,7 +162,108 @@ ags-test: ags-platform-dev ags-test-deps
 	npx tsc --noEmit -p "$(AGS_TSCONFIG_TESTS)" || exit 1
 	@echo "    OK: 0 type errors in the bar pure-module unit tests"
 
+# ---------------------------------------------------------------------------
+# Re-homed bar guards (ticket/bar7-rehome-guards).
+#
+# dotfiles-v3 is retiring the bar-scoped gates that used to run against
+# `dotfiles/config/ags/`. The AGS tree now lives here as `bar/`, so the guards
+# moved with it -- otherwise the coverage those gates provided (icons.json
+# projection drift, mock<->code parity, the audio panel suites, the AGS symbol
+# check) is silently lost. Paths were rewritten `dotfiles/config/ags` -> `bar`.
+#
+# The two guards that are NOT bar-scoped are deliberately NOT ported:
+#   * speedtest-mock-parity and speedtest-no-new-architecture police the
+#     notifications app (`src/gui-tools/notifications/`), which has not
+#     migrated to this repo yet (REQ-002). Only one mapped file is in the bar
+#     (WifiContent.tsx); the rest is the notifications app. They move with that
+#     app's slice, not here.
+# ---------------------------------------------------------------------------
+
+PY := python3
+
+# icons-json-drift: bar/icons.json must equal the role's projection of
+# icons.yaml + the role's schemaVersion. The authored YAML and the schema-version
+# var stay in dotfiles-v3, which OWNS the provisioning that generates the
+# manifest; this target reads them READ-ONLY (owner decision 2026-10-16). The
+# upward search finds the sibling checkout from both the repo root and a
+# worktree; override DOTFILES_ROOT / ICON_MAPPINGS_YAML / ICON_MAPPINGS_ROLE_VARS
+# when it lives elsewhere. Fails loudly (never skips) when an input is missing.
+DOTFILES_ROOT ?= $(shell d="$(CURDIR)"; for i in 1 2 3 4 5 6; do d="$$(dirname "$$d")"; if [ -f "$$d/dotfiles-v3/dotfiles/config/icon-template-color-scheme-mappings/icons.yaml" ]; then echo "$$d/dotfiles-v3"; break; fi; done)
+ICON_MAPPINGS_YAML ?= $(DOTFILES_ROOT)/dotfiles/config/icon-template-color-scheme-mappings/icons.yaml
+ICON_MAPPINGS_ROLE_VARS ?= $(DOTFILES_ROOT)/src/provisioning/ansible/roles/compositor_configs/vars/main.yml
+
+icons-json-drift:
+	$(PY) scripts/icons-json-drift.py --root "$(CURDIR)" \
+		--yaml "$(ICON_MAPPINGS_YAML)" --role-vars "$(ICON_MAPPINGS_ROLE_VARS)"
+
+# Mock<->code parity: every class token in each anchored mock state must resolve
+# to bar/style.css (or bar/audio/audio-panel.css), to the state's mapped TSX, to
+# an allowlisted scaffold, or to a tracked known gap. The mock HTML moved into
+# bar/tests/mocks/ (it is the acceptance contract for a bar feature, so it now
+# lives with the bar rather than with the retired openspec change).
+wifi-mock-parity:
+	$(PY) scripts/wifi-mock-parity.py --root "$(CURDIR)"
+
+bluetooth-mock-parity:
+	$(PY) scripts/bluetooth-mock-parity.py --root "$(CURDIR)"
+
+battery-mock-parity:
+	$(PY) scripts/battery-mock-parity.py --root "$(CURDIR)"
+
+audio-mock-parity:
+	$(PY) scripts/audio-mock-parity.py --root "$(CURDIR)"
+
+# ags-symbol-check: every named import must exist as an export where it is
+# imported from, and every free call must be defined/imported -- the
+# `ReferenceError` class that `ags bundle` exit 0 does NOT catch.
+ags-symbol-check:
+	@command -v node >/dev/null || { echo "FAIL: ags-symbol-check: node is not on PATH" >&2; exit 1; }
+	node bar/tests/ags-symbol-check.mjs
+
+# Audio panel suites (re-homed from redesign-ags-audio-panel/validation). Pure
+# modules only -- no desktop stack -- so each runs on a stock runner.
+AUDIO_VALIDATION := bar/tests/validation
+
+audio-core-test:
+	node $(AUDIO_VALIDATION)/audio-core.test.mjs
+
+audio-presentation-test:
+	node $(AUDIO_VALIDATION)/audio-presentation.test.mjs
+
+pipewire-adapter-test:
+	node $(AUDIO_VALIDATION)/pipewire-adapter.test.mjs
+
+audio-session-runtime-test:
+	node $(AUDIO_VALIDATION)/audio-session-runtime.test.mjs
+
+audio-panel-render-test:
+	node $(AUDIO_VALIDATION)/audio-panel-render.test.mjs
+
+audio-icons-test:
+	node $(AUDIO_VALIDATION)/audio-icons.test.mjs
+
+audio-seek-stability-test:
+	node $(AUDIO_VALIDATION)/audio-seek-stability.test.mjs
+
+# The full audio-panel gate: the unit suites, then mock/code parity, then the
+# render gate, then the symbol check, then the tree typecheck. Mirrors dotfiles'
+# audio-panel-gates, with `ags-typecheck` mapped to this repo's `bar-typecheck`.
+# NOT in gates-ci: bar-typecheck needs the desktop stack (machine-specific
+# @girs/), so it runs on the self-hosted CI job, never on the stock runner.
+audio-panel-gates: audio-core-test audio-presentation-test pipewire-adapter-test \
+	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
+	audio-mock-parity ags-symbol-check bar-typecheck
+
 # The stock-runner subset: every gate that can run without the desktop stack.
 # bar-typecheck needs `ags` + Astal/GIR libraries (machine-specific @girs/),
 # so it runs on the self-hosted CI job, never here.
-gates-ci: ags-test
+#
+# NOTE: icons-json-drift reads the authored icons.yaml + role var from a sibling
+# dotfiles-v3 checkout (read-only) and needs PyYAML; see that target. Every other
+# guard here is pure node/python-stdlib.
+BAR_GUARDS := icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity \
+	audio-mock-parity ags-symbol-check \
+	audio-core-test audio-presentation-test pipewire-adapter-test audio-session-runtime-test \
+	audio-panel-render-test audio-icons-test audio-seek-stability-test
+
+gates-ci: ags-test $(BAR_GUARDS)
