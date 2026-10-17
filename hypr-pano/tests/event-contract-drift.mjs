@@ -1,25 +1,56 @@
-// Cross-language contract drift + clipboard consumer core for hypr-pano.
+// Contract drift + clipboard consumer gate for hypr-pano.
 //
-// Executes the machine definitions (`contracts/event-contract.json` and
-// `.xml`) against this tool's baked constants, then exercises the
-// subscribe-before-read hydration state machine with a scripted fake
-// transport (no live bus) and the pure clipboard item helpers.
+// Pins the SHARED platform event client (spine AD-5, `ags-platform/ports/
+// event-client`) against the canonical contract (`contracts/event-contract
+// .json` / `.xml`), then exercises its subscribe-before-read hydration state
+// machine with a scripted fake transport (no live bus) and the app's pure
+// clipboard item helpers. Executed, never text-scanned.
 //
-// Run with the tool's Makefile:  make -C src/gui-tools/hypr-pano test
+// Run from the repo root:  make hypr-pano-drift-test
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as core from "../lib/event-bus-core.ts";
+// The ONE event client: the app-local event-bus core is gone, so this gate
+// reads the platform's shared client through the dev `node_modules/ags-platform`
+// shortcut `make ags-platform-dev` creates (its target sits outside
+// node_modules so Node's type-stripping accepts the `.ts` source).
+import * as core from "ags-platform/ports/event-client";
 import * as clip from "../lib/clipboard-types.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", "..", "..", "..");
+
+// The canonical contract lives in the sibling `contracts` repo (AGENTS: every
+// app depends on `contracts`). `CONTRACTS_REPO` overrides the location (the
+// Makefile and CI set it); otherwise search upward for a checkout, mirroring
+// the repo's `icons-json-drift` cross-repo read. A missing contract FAILS --
+// never a silent skip: a drift gate that cannot read the contract proves
+// nothing.
+function findContractsRepo() {
+  const override = process.env.CONTRACTS_REPO;
+  if (override) return override;
+  let dir = here;
+  for (let i = 0; i < 8; i += 1) {
+    dir = dirname(dir);
+    if (existsSync(join(dir, "contracts", "event-contract.json"))) {
+      return join(dir, "contracts");
+    }
+  }
+  return null;
+}
+
+const contractsRepo = findContractsRepo();
+if (contractsRepo === null) {
+  console.error(
+    "FAIL: cannot find the `contracts` repo (set CONTRACTS_REPO=/path/to/contracts)",
+  );
+  process.exit(1);
+}
 const contractJson = JSON.parse(
-  readFileSync(join(repoRoot, "contracts", "event-contract.json"), "utf-8"),
+  readFileSync(join(contractsRepo, "event-contract.json"), "utf-8"),
 );
 const contractXml = readFileSync(
-  join(repoRoot, "contracts", "event-contract.xml"),
+  join(contractsRepo, "event-contract.xml"),
   "utf-8",
 );
 
@@ -52,12 +83,12 @@ check(
 
 check(
   "clipboard.update is a contract topic",
-  contractJson.topics[core.CLIPBOARD_UPDATE_TOPIC] !== undefined,
+  contractJson.topics["clipboard.update"] !== undefined,
   true,
 );
 check(
   "clipboard.state is a contract topic",
-  contractJson.topics[core.CLIPBOARD_STATE_TOPIC] !== undefined,
+  contractJson.topics["clipboard.state"] !== undefined,
   true,
 );
 check(
@@ -113,7 +144,7 @@ function fakeTransport(states) {
   });
   const bus = new core.DomainEventBusCore(fake.transport);
   const seen = [];
-  bus.subscribe(core.CLIPBOARD_STATE_TOPIC, (_t, payload) => seen.push(payload));
+  bus.subscribe("clipboard.state", (_t, payload) => seen.push(payload));
   check("subscribe starts signals before hydrating", fake.calls[0], "startSignals");
   check("subscribe hydrates", fake.calls[1], "getTopicState:clipboard.state");
   check("hydrated payload delivered", seen, [{ state: "paused", job_id: "job-9" }]);
@@ -127,7 +158,7 @@ function fakeTransport(states) {
   });
   const bus = new core.DomainEventBusCore(fake.transport);
   const seen = [];
-  bus.subscribe(core.CLIPBOARD_UPDATE_TOPIC, (_t, payload) => seen.push(payload.hash));
+  bus.subscribe("clipboard.update", (_t, payload) => seen.push(payload.hash));
   fake.signals.onDomainEvent([
     "clipboard.update",
     ":1.1",
@@ -151,7 +182,7 @@ function fakeTransport(states) {
 {
   const fake = fakeTransport({});
   const bus = new core.DomainEventBusCore(fake.transport);
-  bus.subscribe(core.CLIPBOARD_STATE_TOPIC, () => {});
+  bus.subscribe("clipboard.state", () => {});
   bus.control("job-9", "pause");
   check("control issued", fake.calls.includes("control:job-9:pause"), true);
 }
