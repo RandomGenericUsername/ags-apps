@@ -38,6 +38,14 @@ openspec/worksets/
 /bar/env.d.ts
 /bar/tests/node_modules/
 
+# hypr-pano typecheck artifacts: the same machine-generated set as the bar's,
+# rebuilt on demand via `make hypr-pano-types` / `make ags-platform-dev` (the
+# committed typecheck config is hypr-pano/tsconfig.pano.json).
+/hypr-pano/node_modules/
+/hypr-pano/tsconfig.json
+/hypr-pano/@girs/
+/hypr-pano/env.d.ts
+
 # The dev-time ags-platform checkout `make ags-platform-dev` fetches on demand
 # (pinned, shallow, anonymous). Deliberately OUTSIDE node_modules: Node refuses
 # to type-strip `.ts` under a real node_modules dir, but realpaths a symlink,

@@ -1,10 +1,12 @@
 .PHONY: help typecheck test bar-types ags-platform-dev bar-typecheck ags-test ags-test-deps gates-ci \
+	hypr-pano-types hypr-pano-typecheck hypr-pano-drift-test \
 	icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity audio-mock-parity \
 	ags-symbol-check audio-core-test audio-presentation-test pipewire-adapter-test \
 	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
 	audio-panel-gates
 
 BAR_DIR := bar
+PANO_DIR := hypr-pano
 AGS_TESTS := $(BAR_DIR)/tests
 AGS_TS_TESTS := $(AGS_TESTS)/ts
 AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
@@ -26,6 +28,10 @@ help:
 	@echo "gates-ci        Stock-runner subset (== CI stock jobs)"
 	@echo "typecheck       Alias for bar-typecheck"
 	@echo "test            Alias for ags-test"
+	@echo ""
+	@echo "hypr-pano (REQ-004, slice 3):"
+	@echo "hypr-pano-typecheck     tsc --noEmit on hypr-pano/ (needs the desktop stack)"
+	@echo "hypr-pano-drift-test    shared event client <-> contracts drift + clipboard helpers"
 	@echo ""
 	@echo "re-homed bar guards (ticket/bar7-rehome-guards):"
 	@echo "icons-json-drift        bar/icons.json == role projection of icons.yaml"
@@ -163,6 +169,69 @@ ags-test: ags-platform-dev ags-test-deps
 	@echo "    OK: 0 type errors in the bar pure-module unit tests"
 
 # ---------------------------------------------------------------------------
+# hypr-pano (REQ-004, slice 3) -- per-app typecheck + drift gate.
+#
+# The app-local Makefile was dropped on the move (bar/ ships none): the gates
+# live here, mirroring bar. `hypr-pano-typecheck` needs the desktop stack
+# (machine-specific @girs/), so it runs on the self-hosted CI job;
+# `hypr-pano-drift-test` is pure (node + the shared client) and runs on a stock
+# runner.
+# ---------------------------------------------------------------------------
+
+# hypr-pano-types -- generate this machine's GIR declarations in-tree, the same
+# shape as bar-types. `ags types -d hypr-pano -u` writes hypr-pano/@girs/,
+# hypr-pano/env.d.ts and a colliding hypr-pano/tsconfig.json (the committed
+# config is tsconfig.pano.json precisely so it survives).
+hypr-pano-types:
+	@if [ -d "$(PANO_DIR)/@girs" ]; then \
+		echo "==> hypr-pano-types: @girs/ already generated, skipping (rm -rf $(PANO_DIR)/@girs to force)"; \
+	else \
+		echo "==> hypr-pano-types: generating GIR types (~2-4 min, needs network, requires the desktop stack)"; \
+		ags types -d "$(CURDIR)/$(PANO_DIR)" -u || exit 1; \
+	fi
+
+# hypr-pano-typecheck -- ZERO errors allowed in hypr-pano/. Error buckets mirror
+# bar-typecheck: fail on errors in THIS repo's tree; tolerate and count the AGS
+# runtime's own (/usr/share/ags/js/) and the external platform unit's (AD-17).
+hypr-pano-typecheck: ags-platform-dev hypr-pano-types
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> hypr-pano-typecheck: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@mkdir -p "$(PANO_DIR)/node_modules"
+	@[ -e "$(PANO_DIR)/node_modules/ags" ] || ln -sfn /usr/share/ags/js "$(PANO_DIR)/node_modules/ags"
+	@[ -e "$(PANO_DIR)/node_modules/gnim" ] || ln -sfn /usr/share/ags/js/node_modules/gnim "$(PANO_DIR)/node_modules/gnim"
+	@echo "==> hypr-pano-typecheck: tsc --noEmit -p $(PANO_DIR)/tsconfig.pano.json"
+	@log=$$(mktemp); \
+	npx tsc --noEmit -p "$(PANO_DIR)/tsconfig.pano.json" > "$$log" 2>&1; \
+	ours=$$(grep 'error TS' "$$log" | grep -F "$(PANO_DIR)/" | grep -vF 'ags-platform/' || true); \
+	thirdparty=$$(grep 'error TS' "$$log" | grep -F '/usr/share/ags/js/' || true); \
+	platform=$$(grep 'error TS' "$$log" | grep -F 'ags-platform/' || true); \
+	other=$$(grep 'error TS' "$$log" | grep -vF "$(PANO_DIR)/" | grep -vF '/usr/share/ags/js/' | grep -vF 'ags-platform/' || true); \
+	echo "    tolerated third-party errors (/usr/share/ags/js): $$(printf '%s\n' "$$thirdparty" | grep -c . || true)"; \
+	echo "    tolerated ags-platform errors (external unit, AD-17): $$(printf '%s\n' "$$platform" | grep -c . || true)"; \
+	if [ -n "$$other" ]; then \
+		echo "FAIL: errors in neither the hypr-pano tree nor the known ags runtime:"; \
+		printf '%s\n' "$$other"; rm -f "$$log"; exit 1; \
+	fi; \
+	if [ -n "$$ours" ]; then \
+		echo "FAIL: type errors in $(PANO_DIR):"; \
+		printf '%s\n' "$$ours"; rm -f "$$log"; exit 1; \
+	fi; \
+	echo "    OK: 0 errors in $(PANO_DIR)"; \
+	rm -f "$$log"
+
+# hypr-pano-drift-test -- the repointed drift gate. Pins the SHARED platform
+# event client (AD-5) against the canonical contract and exercises its
+# hydration state machine + the app's pure clipboard helpers. Pure: no desktop
+# stack, so it runs on a stock runner. The contract lives in the sibling
+# `contracts` repo (CONTRACTS_ROOT; the test also self-searches) and a missing
+# contract FAILS -- never a silent skip.
+hypr-pano-drift-test: ags-platform-dev
+	@command -v node >/dev/null || { echo "FAIL: hypr-pano-drift-test: node is not on PATH" >&2; exit 1; }
+	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(PANO_DIR)/tests/event-contract-drift.mjs
+
+# ---------------------------------------------------------------------------
 # Re-homed bar guards (ticket/bar7-rehome-guards).
 #
 # dotfiles-v3 is retiring the bar-scoped gates that used to run against
@@ -191,6 +260,13 @@ PY := python3
 DOTFILES_ROOT ?= $(shell d="$(CURDIR)"; for i in 1 2 3 4 5 6; do d="$$(dirname "$$d")"; if [ -f "$$d/dotfiles-v3/dotfiles/config/icon-template-color-scheme-mappings/icons.yaml" ]; then echo "$$d/dotfiles-v3"; break; fi; done)
 ICON_MAPPINGS_YAML ?= $(DOTFILES_ROOT)/dotfiles/config/icon-template-color-scheme-mappings/icons.yaml
 ICON_MAPPINGS_ROLE_VARS ?= $(DOTFILES_ROOT)/src/provisioning/ansible/roles/compositor_configs/vars/main.yml
+
+# The canonical event contract lives in the sibling `contracts` repo (AGENTS:
+# every app depends on ags-platform and contracts). hypr-pano's drift gate reads
+# it READ-ONLY, mirroring icons-json-drift's cross-repo read. Override
+# CONTRACTS_ROOT when it lives elsewhere; the gate also self-searches and FAILS
+# (never skips) when the contract is missing.
+CONTRACTS_ROOT ?= $(shell d="$(CURDIR)"; for i in 1 2 3 4 5 6; do d="$$(dirname "$$d")"; if [ -f "$$d/contracts/event-contract.json" ]; then echo "$$d/contracts"; break; fi; done)
 
 icons-json-drift:
 	$(PY) scripts/icons-json-drift.py --root "$(CURDIR)" \
@@ -266,4 +342,9 @@ BAR_GUARDS := icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mo
 	audio-core-test audio-presentation-test pipewire-adapter-test audio-session-runtime-test \
 	audio-panel-render-test audio-icons-test audio-seek-stability-test
 
-gates-ci: ags-test $(BAR_GUARDS)
+# hypr-pano's pure gate (REQ-004): the repointed drift test needs only node + the
+# shared client, so it belongs on the stock runner. `hypr-pano-typecheck` needs
+# the desktop stack and runs on the self-hosted CI job, never here.
+PANO_GUARDS := hypr-pano-drift-test
+
+gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS)
