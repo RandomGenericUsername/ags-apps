@@ -1,5 +1,5 @@
 // Clipboard item model + pure parsing/preview helpers (no GJS imports), so
-// the node test runner can exercise them alongside the event-bus core.
+// the node test runner can exercise them alongside the shared event client.
 
 export type ItemKind = "text" | "image" | "link" | "code" | "color" | "emoji";
 

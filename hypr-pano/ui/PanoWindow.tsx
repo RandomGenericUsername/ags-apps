@@ -1,11 +1,9 @@
 import { Astal, Gdk, Gtk } from "ags/gtk4"
 import app from "ags/gtk4/app"
-import {
-  CLIPBOARD_STATE_TOPIC,
-  CLIPBOARD_UPDATE_TOPIC,
-  domainEvents,
-  type DomainPayload,
-} from "../lib/event-bus"
+// The one domain-event client (spine AD-5): the app consumes the platform's
+// shared client instead of a local event-bus copy. Topics are the contract
+// names, passed as literals exactly as the bar does for `capture.state`.
+import { domainEvents, type DomainPayload } from "ags-platform/adapters/event-bus"
 import {
   itemFromPayload,
   itemKey,
@@ -204,15 +202,16 @@ export function PanoWindow(gdkmonitor: Gdk.Monitor) {
   }
 
   // Live updates: the daemon pushes clipboard.update per capture and
-  // clipboard.state on transitions (subscribe-before-read; see event-bus).
-  domainEvents.subscribe(CLIPBOARD_UPDATE_TOPIC, (_topic: string, payload: DomainPayload) => {
+  // clipboard.state on transitions (subscribe-before-read; the platform's
+  // event client owns the hydration state machine).
+  domainEvents.subscribe("clipboard.update", (_topic: string, payload: DomainPayload) => {
     const item = itemFromPayload(payload as unknown as ClipboardUpdatePayload)
     const key = itemKey(item)
     items = [item, ...items.filter((existing) => itemKey(existing) !== key)]
     selected = 0
     if (mapped) rebuild()
   })
-  domainEvents.subscribe(CLIPBOARD_STATE_TOPIC, (_topic: string, payload: DomainPayload) => {
+  domainEvents.subscribe("clipboard.state", (_topic: string, payload: DomainPayload) => {
     paused = payload.state === "paused"
     jobId = typeof payload.job_id === "string" && payload.job_id.length > 0 ? payload.job_id : null
     incognito.set_label(paused ? "Incognito: on" : "Incognito: off")

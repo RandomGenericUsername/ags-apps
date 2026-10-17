@@ -3,7 +3,7 @@ import GLib from "gi://GLib?version=2.0"
 import Gdk from "gi://Gdk?version=4.0"
 import GdkPixbuf from "gi://GdkPixbuf?version=2.0"
 import type { ClipboardItem, ItemKind } from "../lib/clipboard-types"
-import { resolveIcon } from "../lib/icon-registry"
+import { registryProvider } from "ags-platform/adapters/icon"
 import { Preview } from "./Preview"
 
 //: Stock symbolic fallbacks (used only until the themed `ui-*.svg` renders).
@@ -43,10 +43,14 @@ function iconTexture(path: string, size: number): Gdk.Texture {
  * falling back to a stock symbolic icon until the render exists.
  */
 export function uiIcon(variant: string, size = 18): Gtk.Widget {
-  const path = resolveIcon("ui", variant)
-  if (path !== null) {
+  // The platform's registry-backed `IconProvider` (spine AD-4/AD-7) replaces
+  // the app-local icon-registry copy. A rendered SVG is a `file` source;
+  // anything else (no art for the variant, or a symbolic `name` on a bare
+  // desktop) falls through to the stock symbolic fallback below.
+  const source = registryProvider.resolve("ui", variant)
+  if (source !== null && source.kind === "file") {
     try {
-      const picture = Gtk.Picture.new_for_paintable(iconTexture(path, size))
+      const picture = Gtk.Picture.new_for_paintable(iconTexture(source.path, size))
       picture.set_content_fit(Gtk.ContentFit.CONTAIN)
       picture.set_size_request(size, size)
       picture.set_halign(Gtk.Align.CENTER)
@@ -54,7 +58,7 @@ export function uiIcon(variant: string, size = 18): Gtk.Widget {
       picture.add_css_class("pano-ui-icon")
       return picture
     } catch (error) {
-      console.error(`hypr-pano: cannot load icon ${path}: ${error}`)
+      console.error(`hypr-pano: cannot load icon ${source.path}: ${error}`)
     }
   }
   const fallback = Gtk.Image.new_from_icon_name(
