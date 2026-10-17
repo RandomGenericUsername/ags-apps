@@ -110,9 +110,9 @@ export function openUrl(url: string): void {
   if (target.length === 0) return
   try {
     const proc = Gio.Subprocess.new(["xdg-open", target], Gio.SubprocessFlags.NONE)
-    proc.wait_async(null, () => {
+    proc.wait_async(null, (_src, res: Gio.AsyncResult) => {
       try {
-        proc.wait_finish(null)
+        proc.wait_finish(res)
       } catch {
         // Ignore: the handler's exit code is not actionable here.
       }
@@ -146,6 +146,10 @@ function spawnWithStdin(argv: string[], bytes: Uint8Array): Promise<void> {
     try {
       const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDIN_PIPE)
       const stdin = proc.get_stdin_pipe()
+      if (stdin === null) {
+        reject(new Error("subprocess has no stdin pipe"))
+        return
+      }
       stdin.write_bytes(new GLib.Bytes(bytes), null)
       stdin.close(null)
       proc.wait_async(null, (_src: unknown, res: Gio.AsyncResult) => {

@@ -68,7 +68,7 @@ export function Preview(item: ClipboardItem): Gtk.Widget {
     wrap.set_overflow(Gtk.Overflow.HIDDEN)
     wrap.append(area)
     box.append(wrap)
-    const hex = Gtk.Label({ label: (item.text ?? "").trim(), xalign: 0 })
+    const hex = new Gtk.Label({ label: (item.text ?? "").trim(), xalign: 0 })
     hex.add_css_class("pano-hex")
     box.append(hex)
     return box

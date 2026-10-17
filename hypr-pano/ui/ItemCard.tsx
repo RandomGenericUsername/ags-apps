@@ -27,11 +27,12 @@ function iconTexture(path: string, size: number): Gdk.Texture {
   let pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, size, size)
   if (pixbuf.get_width() > size || pixbuf.get_height() > size) {
     const factor = Math.min(size / pixbuf.get_width(), size / pixbuf.get_height())
-    pixbuf = pixbuf.scale_simple(
+    const scaled = pixbuf.scale_simple(
       Math.max(1, Math.round(pixbuf.get_width() * factor)),
       Math.max(1, Math.round(pixbuf.get_height() * factor)),
       GdkPixbuf.InterpType.BILINEAR,
     )
+    if (scaled !== null) pixbuf = scaled
   }
   const texture = Gdk.Texture.new_for_pixbuf(pixbuf)
   textureCache.set(key, texture)
