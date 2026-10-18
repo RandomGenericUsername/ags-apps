@@ -2,7 +2,8 @@ import app from "ags/gtk4/app"
 import Gtk from "gi://Gtk?version=4.0"
 import style from "./style.css"
 import { theme } from "ags-platform/adapters/theme"
-import { PanoWindow } from "./ui/PanoWindow"
+import { PanoWindow, hideWindow, showWindow, toggleWindow } from "./ui/PanoWindow"
+import { handleRequest } from "./lib/requests"
 
 /**
  * Register one top-level window with the application.
@@ -21,6 +22,21 @@ function addWindow(element: JSX.Element): void {
 app.start({
   instanceName: "hypr-pano",
   css: style,
+  // External control surface, mirroring `bar/app.tsx`. The overlay starts
+  // hidden and runs with keymode ON_DEMAND, so two paths depend on this:
+  //   1. the launcher's start-if-down branch can only *start* the instance, so
+  //      it needs `ags request show` to reveal the freshly started window;
+  //   2. the global Escape keybind runs `ags request popup-close` (the bar's
+  //      name) -- without a handler that logs `instance "hypr-pano" has no
+  //      request handler implemented` and strands the overlay.
+  // `toggle` mirrors the `ags toggle` window command so either spelling works.
+  requestHandler(argv: string[], res: (response: unknown) => void) {
+    handleRequest(argv, res, {
+      show: showWindow,
+      hide: hideWindow,
+      toggle: toggleWindow,
+    })
+  },
   main() {
     // Reuse the shell's generated palette so the overlay matches the bar.
     // Applied through the Theme port (spine AD-13): the adapter owns WHICH

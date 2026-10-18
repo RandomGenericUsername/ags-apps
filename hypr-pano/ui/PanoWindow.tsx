@@ -22,11 +22,26 @@ import {
 } from "../lib/history"
 import { ItemCard, uiIcon } from "./ItemCard"
 
-const WINDOW_NAME = "hypr-pano-window"
+export const WINDOW_NAME = "hypr-pano-window"
 
-function hideWindow(): void {
+// The overlay window's visibility controls. `hideWindow` already drove Escape
+// and the copy/open paths; `show`/`toggle` are exposed so the instance request
+// surface (app.tsx) drives the SAME window those keys drive. `app.get_window`
+// returns the first registered window with the name -- the per-monitor overlay
+// created below -- so all three target that one surface.
+export function hideWindow(): void {
   const window = app.get_window(WINDOW_NAME)
   if (window) window.visible = false
+}
+
+export function showWindow(): void {
+  const window = app.get_window(WINDOW_NAME)
+  if (window) window.visible = true
+}
+
+export function toggleWindow(): void {
+  const window = app.get_window(WINDOW_NAME)
+  if (window) window.visible = !window.visible
 }
 
 /** The bottom layer-shell clipboard overlay (design D7). */

@@ -1,10 +1,11 @@
-// Contract drift + clipboard consumer gate for hypr-pano.
+// Contract drift + clipboard consumer + instance-request gate for hypr-pano.
 //
 // Pins the SHARED platform event client (spine AD-5, `ags-platform/ports/
 // event-client`) against the canonical contract (`contracts/event-contract
 // .json` / `.xml`), then exercises its subscribe-before-read hydration state
-// machine with a scripted fake transport (no live bus) and the app's pure
-// clipboard item helpers. Executed, never text-scanned.
+// machine with a scripted fake transport (no live bus), the app's pure
+// clipboard item helpers, and the `ags request` dispatch mapping. Executed,
+// never text-scanned.
 //
 // Run from the repo root:  make hypr-pano-drift-test
 
@@ -17,6 +18,7 @@ import { fileURLToPath } from "node:url";
 // node_modules so Node's type-stripping accepts the `.ts` source).
 import * as core from "ags-platform/ports/event-client";
 import * as clip from "../lib/clipboard-types.ts";
+import * as req from "../lib/requests.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -217,6 +219,53 @@ check("unknown kind falls back to text", clip.itemFromPayload({ type: "bogus", h
 check("matchesQuery is case-insensitive", clip.matchesQuery({ hash: "h", kind: "text", timestamp: 1, favorite: false, text: "Hello World", path: null }, "hello"), true);
 check("matchesQuery excludes non-matches", clip.matchesQuery({ hash: "h", kind: "text", timestamp: 1, favorite: false, text: "Hello", path: null }, "zzz"), false);
 check("kindIcon differs per kind", clip.kindIcon("image") !== clip.kindIcon("link"), true);
+
+// ── Instance request dispatch (`ags request`) ─────────────────────────────
+//
+// The requestHandler must be *executed*, not text-scanned: a handler that
+// silently no-ops still bundles and typechecks. Drive the pure dispatcher with
+// recording controls and assert the mapping AND the single `res(...)` response.
+function dispatch(argv) {
+  const calls = [];
+  const responses = [];
+  req.handleRequest(
+    argv,
+    (response) => responses.push(response),
+    {
+      show: () => calls.push("show"),
+      hide: () => calls.push("hide"),
+      toggle: () => calls.push("toggle"),
+    },
+  );
+  return { calls, responses };
+}
+
+{
+  const r = dispatch(["toggle"]);
+  check("toggle request toggles the window", r.calls, ["toggle"]);
+  check("toggle responds ok once", r.responses, ["ok"]);
+}
+{
+  const r = dispatch(["show"]);
+  check("show request shows the window", r.calls, ["show"]);
+  check("show responds ok once", r.responses, ["ok"]);
+}
+{
+  const r = dispatch(["hide"]);
+  check("hide request hides the window", r.calls, ["hide"]);
+  check("hide responds ok once", r.responses, ["ok"]);
+}
+{
+  // The Esc keybind's name (the bar's): it must hide, or the overlay is stranded.
+  const r = dispatch(["popup-close"]);
+  check("popup-close hides the window", r.calls, ["hide"]);
+  check("popup-close responds ok once", r.responses, ["ok"]);
+}
+{
+  const r = dispatch(["bogus", "x"]);
+  check("unknown request drives no window action", r.calls, []);
+  check("unknown request names itself", r.responses, ["unknown request: bogus x"]);
+}
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);
