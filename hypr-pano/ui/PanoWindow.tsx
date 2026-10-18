@@ -1,5 +1,6 @@
 import { Astal, Gdk, Gtk } from "ags/gtk4"
 import app from "ags/gtk4/app"
+import GLib from "gi://GLib?version=2.0"
 // The one domain-event client (spine AD-5): the app consumes the platform's
 // shared client instead of a local event-bus copy. Topics are the contract
 // names, passed as literals exactly as the bar does for `capture.state`.
@@ -55,6 +56,10 @@ export function PanoWindow(gdkmonitor: Gdk.Monitor) {
   //: move the highlight without rebuilding (rebuilding re-rasterized every
   //: icon and froze the machine under fast arrow repeats).
   let cards: Gtk.Widget[] = []
+  //: Signature of the visible list the current `cards` were built from. A
+  //: reopen whose history is unchanged reuses them instead of paying the
+  //: measured ~430 ms rebuild (141 items) again.
+  let builtKey: string | null = null
   //: Whether the surface is mapped; capture updates while hidden just refresh
   //: the in-memory list and rebuild lazily on the next show.
   let mapped = false
@@ -96,6 +101,12 @@ export function PanoWindow(gdkmonitor: Gdk.Monitor) {
     return items.filter((item) => matchesQuery(item, query))
   }
 
+  //: Identity of a visible list: same kinds + hashes in the same order means
+  //: the existing cards still describe it (hashes are content-derived).
+  function keyOf(shown: ClipboardItem[]): string {
+    return shown.map((item) => `${item.kind}:${item.hash}`).join("\n")
+  }
+
   function rebuild(): void {
     let child = list.get_first_child()
     while (child) {
@@ -104,6 +115,7 @@ export function PanoWindow(gdkmonitor: Gdk.Monitor) {
       child = next
     }
     const shown = visibleItems()
+    builtKey = keyOf(shown)
     cards = []
     empty.set_visible(shown.length === 0)
     list.set_visible(shown.length > 0)
@@ -149,10 +161,22 @@ export function PanoWindow(gdkmonitor: Gdk.Monitor) {
     }
   }
 
-  function reload(): void {
+  //: Re-read the document and sync the cheap state (visibility + highlight).
+  //: Returns true when the visible list no longer matches the built cards and
+  //: a rebuild is therefore required.
+  function hydrate(): boolean {
     items = readHistory()
     selected = 0
-    rebuild()
+    const shown = visibleItems()
+    const changed = keyOf(shown) !== builtKey
+    empty.set_visible(shown.length === 0)
+    list.set_visible(shown.length > 0)
+    applySelection(false)
+    return changed
+  }
+
+  function reload(): void {
+    if (hydrate()) rebuild()
   }
 
   function select(item: ClipboardItem): void {
@@ -276,12 +300,27 @@ export function PanoWindow(gdkmonitor: Gdk.Monitor) {
         // that happened while it was hidden, even with no hub signal.
         self.connect("map", () => {
           mapped = true
-          reload()
           // ON_DEMAND (like the capture tool and ICME) so the overlay never
           // grabs the keyboard from other AGS windows; present() asks the
           // compositor to focus the surface on show.
+          //
+          // Present BEFORE the rebuild: constructing ~140 cards (measured
+          // ~430 ms on a full history) used to run synchronously in this
+          // handler, so the first frame did not land until it finished and the
+          // overlay appeared blank for that long. Showing first and deferring
+          // the rebuild to an idle callback puts the surface on screen
+          // immediately, then fills the cards in.
           self.present()
           search.grab_focus()
+          // hydrate() itself is cheap (~0.4 ms read); it reports whether the
+          // visible list changed, which is what gates the expensive rebuild.
+          if (!hydrate()) return
+          GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            // Re-check: a search keystroke or a live capture may have rebuilt
+            // the cards between the map and this callback.
+            if (mapped && keyOf(visibleItems()) !== builtKey) rebuild()
+            return false
+          })
         })
         self.connect("unmap", () => {
           mapped = false
