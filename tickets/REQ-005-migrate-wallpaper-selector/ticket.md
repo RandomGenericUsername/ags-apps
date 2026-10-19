@@ -2,7 +2,7 @@
 id: REQ-005
 title: "Migrate wallpaper-selector"
 kind: requirement
-status: proposed
+status: done
 lane: 2
 links:
   openspec: migrate-wallpaper-selector
@@ -83,3 +83,18 @@ Source: spine **AD-5**, **AD-7**, **AD-13**; handoff iteration 6.
   open path. All synchronous open-path build costs are single- to high-teens ms,
   below AD-24's "tens of ms or more" threshold, so the light surface keeps its
   direct path. Harness: `/tmp/opencode/build_wsperf.py` + `/tmp/opencode/wsperf*`.
+
+## Closing evidence (added at the v0.3.8 roll-up)
+
+- **Merged:** `e09e13d merge ticket/wall6-migrate: wallpaper-selector thin
+  consumer (REQ-005)`. Tag `v0.3.6`.
+- **Consumed by dotfiles-v3:** `0acf4e18 feat(ags_apps): consume
+  wallpaper-selector from the unit + bump pin to v0.3.6`.
+- **Copies gone:** `find wallpaper-selector -name 'event-bus*' -o -name
+  'icon-registry.ts' -o -name 'theme.ts'` → no matches;
+  `ui/WallpaperSelectorWindow.tsx` imports
+  `ags-platform/adapters/{event-bus,icon,theme}`.
+- **Gates (run in this repo, 2026-10-19):**
+  `make wallpaper-selector-typecheck` → exit 0 (`OK: 0 errors in
+  wallpaper-selector`); `make gates-ci` → exit 0 (includes the pure tests and
+  the drift gate).

@@ -2,7 +2,7 @@
 id: EPIC-001
 title: "AGS apps as thin consumers of the platform"
 kind: epic
-status: proposed
+status: done
 lane: bmad-advisory
 links:
   openspec: none
@@ -23,10 +23,24 @@ Governed by spine **AD-1** (apps → platform only), **AD-5** (one event client)
 
 ## Children
 
-- [ ] `REQ-001` — Bar as a thin platform consumer + publish + CI (`proposed`)
-- [ ] `REQ-002` — Migrate notifications (`proposed`)
-- [ ] `REQ-003` — Migrate capture-tool (`proposed`)
-- [ ] `REQ-004` — Migrate hypr-pano (`proposed`)
-- [ ] `REQ-005` — Migrate wallpaper-selector (`proposed`)
-- [ ] `REQ-006` — Migrate icme (`proposed`)
-- [ ] `REQ-007` — Migrate btop-theme-studio (`in-progress`)
+- [x] `REQ-001` — Bar as a thin platform consumer + publish + CI (`done`)
+- [x] `REQ-002` — Migrate notifications (`done`)
+- [x] `REQ-003` — Migrate capture-tool (`done`)
+- [x] `REQ-004` — Migrate hypr-pano (`done`)
+- [x] `REQ-005` — Migrate wallpaper-selector (`done`)
+- [x] `REQ-006` — Migrate icme (`done`)
+- [x] `REQ-007` — Migrate btop-theme-studio (`done`)
+
+## Closing evidence (v0.3.8)
+
+All seven children merged and tagged; dotfiles-v3 pins the unit at `v0.3.8`
+(`src/provisioning/ansible/roles/ags_apps/vars/main.yml:99`). Per-child
+commit/tag/consumption evidence is recorded in each `REQ-00X/ticket.md` under
+"Closing evidence". AD-1 holds by source scan: no app imports a sibling app;
+each app imports only `ags-platform/*` plus its own modules.
+
+Lifecycle caveat: the OpenSpec changes linked by REQ-001..006 have no artifacts
+under `openspec/changes/` (the archive is empty), so `openspec validate
+--change <name>` cannot be run; REQ-003's `Notify` criterion is N/A and left
+unticked. Closure here rests on the merged commits, tags, gates and dotfiles
+consumption, not on those two lifecycle gates.
