@@ -67,7 +67,9 @@ Source: spine **AD-5**, **AD-7**, **AD-13**; handoff iteration 6.
   `anchor={0}` -> `Astal.WindowAnchor.NONE` (identical anchoring, honest type).
 - **Gates.** `wallpaper-selector-typecheck` (desktop stack) +
   `wallpaper-selector-tests` + `wallpaper-selector-drift-test` (stock);
-  the two pure gates join `gates-ci`. `tests/model.mjs` re-homed as
+  the two pure gates join `gates-ci`. Per-app CI:
+  `.github/workflows/wallpaper-selector.yml` (stock tests + drift; self-hosted
+  typecheck). `tests/model.mjs` re-homed as
   `tests/model.test.mjs` (house `*.test.mjs` naming).
   Evidence: `make gates-ci` -> exit 0; `ags bundle
   wallpaper-selector/app.tsx /tmp/opencode/wall.js --gtk 4` -> exit 0.
