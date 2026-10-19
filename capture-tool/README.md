@@ -37,8 +37,13 @@ capture-tool/
 ├── lib/icon-registry.ts# palette-aware icon lookup for this instance
 ├── types.ts            # shared types (frozen by the parity gate)
 ├── style.css           # the stylesheet (frozen by the parity gate)
-├── bin/capture-tool    # the backend CLI
-└── tests/              # the Python suites
+├── bin/capture-tool    # the Python backend CLI (no third-party deps)
+└── tests/
+    ├── ts/             # GUI unit tests (`node --test`)
+    └── python/         # backend pytest suites
+        ├── test_capture_tool_cli.py
+        ├── test_capture_settings.py
+        └── test_notify.py
 ```
 
 `domain/` and `ports/` are pure by rule, not by convention:
@@ -86,6 +91,37 @@ The capture GUI was split out of the shared bar app into this directory
 verbatim (see `openspec/changes/extract-capture-gui-tool/`). `style.css` and
 `types.ts` are unchanged by both changes — the parity gate enforces it.
 
+## Python backend
+
+`bin/capture-tool` is the backend the GUI shells out to; it was relocated here
+from `dotfiles-v3/src/gui-tools/capture-tool/` so the app is a WHOLE,
+self-contained component (the GUI and the backend move together, and the
+backend's suites are gated here rather than living un-gated in dotfiles).
+
+The CLI has **no third-party imports** — Python 3 standard library only. It
+resolves the target, selects the recorder backend (`gpu-screen-recorder` /
+`wf-recorder`), reads/writes the app config
+(`$XDG_CONFIG_HOME/capture-tool/config.json`), emits
+`org.freedesktop.Notifications` outcome cards, and hands the exact recorder argv
+to `dotfiles-runtime capture`. The dotfiles `cli_tools` role installs this file
+into the user bin directory as `capture-tool` (mode `0755`).
+
+The Python suites under `tests/python/` load the script directly via
+`importlib` (no install step, no live backends). They locate it as
+`Path(__file__).resolve().parents[2] / "bin" / "capture-tool"` — from
+`tests/python/<test>.py`, `parents[2]` is the app directory, so the suites are
+independent of the caller's CWD. Run them with:
+
+```sh
+make capture-tool-backend-tests
+# or directly (uv supplies pytest; the app has no venv/pyproject):
+uv run --with pytest pytest capture-tool/tests/python -q
+```
+
+There is no `conftest.py`: the suites are self-contained and only share the
+`_BIN` resolution above. `capture-tool/pytest.ini` sets `testpaths =
+tests/python` so `cd capture-tool && pytest` also works.
+
 ## Dependency notes
 
 The provisioning manifest already includes core screenshot utilities (`grim`, `slurp`, `wl-clipboard`).
@@ -93,16 +129,20 @@ The recording setup also requires media/audio dependencies and a recorder backen
 
 ## Gates
 
-Two developer-run gates cover this directory (there is no working CI for
-either — `design.md` §7.1 in the hexagonal change explains why):
+The app-local gates are wired in the repo `Makefile` and run on the stock
+runner (`make gates-ci` includes the first two):
 
-- `make capture-typecheck` — `tsc --noEmit`, zero errors in our files. Needed
-  because `ags bundle` transpiles without type checking, so a wrong signature
-  otherwise reaches production silently. Requires the desktop stack.
-- `make capture-hexagonal-gate` — layer purity, the single request→argv
-  translator, absence of the dead scaffolding, per-file provisioning
-  registration, and the class vocabulary of the classic layout. Red until the
-  refactor lands.
+- `make capture-tool-typecheck` — `tsc --noEmit`, zero errors in our files.
+  Needed because `ags bundle` transpiles without type checking, so a wrong
+  signature otherwise reaches production silently. Requires the desktop stack.
+- `make capture-tool-tests` — the GUI's pure domain/wiring unit tests under
+  `tests/ts/` plus the platform-consumption acceptance.
+- `make capture-tool-backend-tests` — the backend pytest suites under
+  `tests/python/` (97 tests; needs `uv` + Python 3, no desktop stack).
+
+The retired dotfiles gates (`make capture-typecheck`, `make capture-test`,
+`make capture-hexagonal-gate`) no longer exist there; this directory is their
+replacement.
 
 ## Recording host (Phase 5)
 
