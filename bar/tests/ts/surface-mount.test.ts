@@ -1,8 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { createSurfaceMount, createSurfaceRegistry } from "../../kit/surface.ts"
+import {
+  createSurfaceMount,
+  createSurfaceRegistry,
+  surfaceContentSignature,
+} from "../../kit/surface.ts"
 import type { SurfaceSpec } from "../../kit/surface.ts"
 import { overlays } from "../../kit/overlay.ts"
+import { createOverlayLifecycle } from "ags-platform/ports/overlay-lifecycle"
 
 /**
  * The AD-10 mount policy, proven without GTK.
@@ -89,4 +94,71 @@ test("the registry looks up surfaces by id", () => {
   assert.equal(registry.get("demo"), spec)
   assert.deepEqual(registry.all(), [spec])
   assert.equal(registry.get("missing"), undefined)
+})
+
+/**
+ * The AD-24 open path at the bar's `PopupHost`, driven through the platform
+ * primitive with a stub scheduler so it is provable on a stock runner.
+ *
+ * `PopupHost` presents the window through its own `visible` binding, defers the
+ * body build to the idle queue, and — because AD-10 tears the body down on hide
+ * — moves the signature to the next mount generation on close. These tests pin
+ * both halves: the build is deferred (not on the open path), and an unchanged
+ * reopen still rebuilds because the body was dropped.
+ */
+function stubLifecycle(key: () => string) {
+  const queued: (() => void)[] = []
+  let builds = 0
+  const lifecycle = createOverlayLifecycle(
+    {
+      present: () => {},
+      hydrate: () => {},
+      build: () => {
+        builds += 1
+      },
+      key,
+    },
+    { defer: (task) => queued.push(task) },
+  )
+  const drain = () => {
+    while (queued.length > 0) queued.shift()!()
+  }
+  return { lifecycle, drain, builds: () => builds }
+}
+
+test("the bar's surface build is deferred, not run on the open path", () => {
+  const h = stubLifecycle(() => surfaceContentSignature("wifi", 0))
+  h.lifecycle.open()
+  assert.equal(h.builds(), 0, "open() must not build synchronously")
+  h.drain()
+  assert.equal(h.builds(), 1, "the idle callback runs the build")
+})
+
+test("a bar surface rebuilds on every open: AD-10 tears the body down", () => {
+  let generation = 0
+  const h = stubLifecycle(() => surfaceContentSignature("wifi", generation))
+
+  h.lifecycle.open()
+  h.drain()
+  assert.equal(h.builds(), 1)
+
+  // Close and reopen with the SAME content. The body was dropped, so the mount
+  // generation advances and the build runs again.
+  h.lifecycle.close()
+  generation += 1
+  h.lifecycle.open()
+  h.drain()
+  assert.equal(h.builds(), 2, "an unchanged reopen rebuilds (no reusable body)")
+})
+
+test("without the generation the unchanged signature would skip, leaving an empty surface", () => {
+  // The trap `surfaceContentSignature` exists to avoid: a content-only key makes
+  // the primitive skip the reopen against a body that AD-10 already tore down.
+  const h = stubLifecycle(() => surfaceContentSignature("wifi", 0))
+  h.lifecycle.open()
+  h.drain()
+  h.lifecycle.close()
+  h.lifecycle.open()
+  h.drain()
+  assert.equal(h.builds(), 1, "the stale signature skips the rebuild — the bug")
 })
