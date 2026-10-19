@@ -240,6 +240,103 @@ hypr-pano-drift-test: ags-platform-dev
 	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(PANO_DIR)/tests/event-contract-drift.mjs
 
 # ---------------------------------------------------------------------------
+# notifications (REQ-002, slice 4) -- per-app typecheck + tests + drift gates.
+#
+# Mirrors bar/ and hypr-pano/: the app-local Makefile was dropped on the move.
+# `notifications-typecheck` needs the desktop stack (machine-specific @girs/),
+# so it runs on the self-hosted CI job; `notifications-tests` and
+# `notifications-drift-test` are pure (node + the shared client) and run on a
+# stock runner.
+# ---------------------------------------------------------------------------
+
+NOTIF_TESTS := $(NOTIF_DIR)/tests
+NOTIF_TSCONFIG_TESTS := $(NOTIF_TESTS)/tsconfig.tests.json
+
+# notifications-types -- generate this machine's GIR declarations in-tree, the
+# same shape as bar-types / hypr-pano-types. `ags types -d notifications -u`
+# writes notifications/@girs/, notifications/env.d.ts and a colliding
+# notifications/tsconfig.json (the committed config is
+# tsconfig.notifications.json precisely so it survives).
+notifications-types:
+	@if [ -d "$(NOTIF_DIR)/@girs" ]; then \
+		echo "==> notifications-types: @girs/ already generated, skipping (rm -rf $(NOTIF_DIR)/@girs to force)"; \
+	else \
+		echo "==> notifications-types: generating GIR types (~2-4 min, needs network, requires the desktop stack)"; \
+		ags types -d "$(CURDIR)/$(NOTIF_DIR)" -u || exit 1; \
+	fi
+
+# notifications-typecheck -- ZERO errors allowed in notifications/. Error
+# buckets mirror bar-typecheck: fail on errors in THIS repo's tree; tolerate and
+# count the AGS runtime's own (/usr/share/ags/js/) and the external platform
+# unit's (AD-17).
+notifications-typecheck: ags-platform-dev notifications-types
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> notifications-typecheck: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@mkdir -p "$(NOTIF_DIR)/node_modules"
+	@[ -e "$(NOTIF_DIR)/node_modules/ags" ] || ln -sfn /usr/share/ags/js "$(NOTIF_DIR)/node_modules/ags"
+	@[ -e "$(NOTIF_DIR)/node_modules/gnim" ] || ln -sfn /usr/share/ags/js/node_modules/gnim "$(NOTIF_DIR)/node_modules/gnim"
+	@echo "==> notifications-typecheck: tsc --noEmit -p $(NOTIF_DIR)/tsconfig.notifications.json"
+	@log=$$(mktemp); \
+	npx tsc --noEmit -p "$(NOTIF_DIR)/tsconfig.notifications.json" > "$$log" 2>&1; \
+	ours=$$(grep 'error TS' "$$log" | grep -F "$(NOTIF_DIR)/" | grep -vF 'ags-platform/' || true); \
+	thirdparty=$$(grep 'error TS' "$$log" | grep -F '/usr/share/ags/js/' || true); \
+	platform=$$(grep 'error TS' "$$log" | grep -F 'ags-platform/' || true); \
+	other=$$(grep 'error TS' "$$log" | grep -vF "$(NOTIF_DIR)/" | grep -vF '/usr/share/ags/js/' | grep -vF 'ags-platform/' || true); \
+	echo "    tolerated third-party errors (/usr/share/ags/js): $$(printf '%s\n' "$$thirdparty" | grep -c . || true)"; \
+	echo "    tolerated ags-platform errors (external unit, AD-17): $$(printf '%s\n' "$$platform" | grep -c . || true)"; \
+	if [ -n "$$other" ]; then \
+		echo "FAIL: errors in neither the notifications tree nor the known ags runtime:"; \
+		printf '%s\n' "$$other"; rm -f "$$log"; exit 1; \
+	fi; \
+	if [ -n "$$ours" ]; then \
+		echo "FAIL: type errors in $(NOTIF_DIR):"; \
+		printf '%s\n' "$$ours"; rm -f "$$log"; exit 1; \
+	fi; \
+	echo "    OK: 0 errors in $(NOTIF_DIR)"; \
+	rm -f "$$log"
+
+# notifications-tests-deps -- @types/node under $(NOTIF_TESTS)/, a SIBLING of
+# $(NOTIF_TSCONFIG_TESTS) so tsc's typeRoots walk finds it (TS2688 otherwise).
+# The separate npm project (--prefix, no package.json) cannot prune the root
+# one. Gitignored.
+notifications-tests-deps:
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> notifications-tests: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@if [ ! -d $(NOTIF_TESTS)/node_modules/@types/node ]; then \
+		echo "==> notifications-tests: installing @types/node under $(NOTIF_TESTS)/ (gitignored)"; \
+		npm install --no-save --no-package-lock --prefix $(NOTIF_TESTS) @types/node@24 >/dev/null || exit 1; \
+	fi
+
+# notifications-tests -- the cards' PURE model. No desktop stack and no
+# platform: card-model.ts imports nothing, so plain `node --test` runs the
+# suite on a stock runner (no resolve hook needed).
+notifications-tests: notifications-tests-deps
+	@command -v node >/dev/null || { echo "FAIL: notifications-tests: node is not on PATH" >&2; exit 1; }
+	@[ -x node_modules/.bin/tsc ] || { echo "FAIL: notifications-tests: typescript missing after notifications-tests-deps" >&2; exit 1; }
+	@[ -d $(NOTIF_TESTS)/node_modules/@types/node ] || { echo "FAIL: notifications-tests: @types/node missing after notifications-tests-deps" >&2; exit 1; }
+	@echo "==> notifications-tests: node --test $(NOTIF_TESTS)/*.test.ts"
+	node --test $(NOTIF_TESTS)/*.test.ts
+	@echo "==> notifications-tests: tsc --noEmit -p $(NOTIF_TSCONFIG_TESTS)"
+	npx tsc --noEmit -p "$(NOTIF_TSCONFIG_TESTS)" || exit 1
+	@echo "    OK: 0 type errors in the notifications pure-module unit tests"
+
+# notifications-drift-test -- the repointed drift gate. Pins the SHARED platform
+# event client (AD-5) against the canonical contract, exercises its
+# subscribe-before-read hydration state machine for wallpaper.state /
+# speedtest.state, and asserts the app still hosts
+# org.freedesktop.Notifications. Pure: no desktop stack, so it runs on a stock
+# runner. The contract lives in the sibling `contracts` repo (CONTRACTS_ROOT;
+# the test also self-searches) and a missing contract FAILS -- never a silent
+# skip.
+notifications-drift-test: ags-platform-dev
+	@command -v node >/dev/null || { echo "FAIL: notifications-drift-test: node is not on PATH" >&2; exit 1; }
+	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(NOTIF_DIR)/tests/event-contract-drift.mjs
+
+# ---------------------------------------------------------------------------
 # Re-homed notifications guard (REQ-002, slice 4; ticket/notif4-migrate).
 #
 # `speedtest-no-new-architecture` was authored in dotfiles-v3 against
@@ -376,6 +473,6 @@ PANO_GUARDS := hypr-pano-drift-test
 # once wired, the drift/unit gates) need only node/python-stdlib, so they belong
 # on the stock runner. `notifications-typecheck` needs the desktop stack and
 # runs on the self-hosted CI job, never here.
-NOTIF_GUARDS := speedtest-no-new-architecture
+NOTIF_GUARDS := speedtest-no-new-architecture notifications-tests notifications-drift-test
 
 gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS)

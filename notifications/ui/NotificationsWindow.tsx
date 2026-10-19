@@ -13,6 +13,22 @@ import { domainEvents, type DomainPayload } from "ags-platform/adapters/event-bu
 import { registryProvider } from "ags-platform/adapters/icon"
 // Theming through the platform Theme port (spine AD-13).
 import { theme } from "ags-platform/adapters/theme"
+// The cards' PURE model (value formatting + stage mapping): extracted so
+// `make notifications-tests` can execute it without the desktop stack.
+import {
+  SPEEDTEST_STEPS,
+  WALLPAPER_STEPS,
+  asNumber,
+  asText,
+  failureForStage,
+  fallbackGlyph,
+  mbpsLabel,
+  msLabel,
+  speedtestContextLine,
+  stageIndex,
+  statusForStage,
+  triggerPhrase,
+} from "../lib/card-model"
 
 //: The wire payloads the two progress cards read. The platform client hands
 //: back a `DomainPayload` (an open `{key: unknown}` record); these aliases keep
@@ -54,24 +70,6 @@ const TILE_ICON = 24
 // dismissed — the mockup's "Capture failed" card. A sender's 0 ("never") or
 // -1 ("server default") is treated as the default so nothing sticks forever.
 const DEFAULT_TIMEOUT_MS = 8000
-const WALLPAPER_STEPS = [
-  "Wallpaper is on screen",
-  "Color palette generated",
-  "Effects and icons processed",
-  "Desktop consumers updated",
-]
-
-// The speed test's four steps, in the order `speedtest-cli` actually performs
-// them (latency, then download, then upload) — not invented progress. The bar
-// pulses while they run because the CLI returns ONE JSON blob at the end and
-// the producer has no intermediate fraction to publish; a determinate
-// percentage here would be a number the system made up.
-const SPEEDTEST_STEPS = [
-  "Test scheduled",
-  "Latency measured",
-  "Download measured",
-  "Upload measured",
-]
 
 // Auto-dismiss delay after a SUCCESSFUL run (the shipped wallpaper completion
 // delay, so the two progress cards behave alike). A failure is sticky.
@@ -106,24 +104,6 @@ function hideWindow(): void {
 function showWindow(): void {
   const window = app.get_window(WINDOW_NAME)
   if (window) window.visible = true
-}
-
-/** A finite payload number, or null — never a coerced NaN on screen. */
-function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
-
-/** A payload string, trimmed; "" for anything else, including null/undefined. */
-function asText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function mbpsLabel(value: number | undefined): string {
-  return value === undefined ? "—" : `${value.toFixed(1)} Mbps`
-}
-
-function msLabel(value: number | undefined): string {
-  return value === undefined ? "—" : `${Math.round(value)} ms`
 }
 
 /** Absolute on-disk image for the notification, or null (fallback tile). */
@@ -171,8 +151,7 @@ function tileContent(
   // Fallback tile: the app's initial (or "!" for critical) so icon-less
   // traffic (e.g. toggle-touchpad notify-send) still renders a tidy card.
   const appName = notification.get_app_name() ?? ""
-  const glyph = critical ? "!" : (appName.charAt(0).toUpperCase() || "?")
-  const label = new Gtk.Label({ label: glyph })
+  const label = new Gtk.Label({ label: fallbackGlyph(appName, critical) })
   label.add_css_class("notif-fallback")
   label.set_halign(Gtk.Align.CENTER)
   label.set_valign(Gtk.Align.CENTER)
@@ -520,43 +499,6 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
     } else wallpaperProgress.set_fraction(0)
   }
 
-  function statusForStage(stage: string): string {
-    switch (stage) {
-      case "generating_palette": return "Wallpaper is on screen. Generating the color palette…"
-      case "palette_generated": return "Color palette generated. Preparing effects and icons…"
-      case "preparing_appearance_assets": return "Color palette generated. Preparing effects and icons…"
-      case "appearance_assets_ready": return "Appearance assets prepared. Updating desktop apps…"
-      case "reconciling_consumers": return "Appearance assets prepared. Updating desktop apps…"
-      case "finished": return "All visual settings are up to date."
-      default: return "Setting the new wallpaper…"
-    }
-  }
-
-  function stageIndex(stage: string): number {
-    switch (stage) {
-      case "setting_wallpaper": return 0
-      case "generating_palette": return 1
-      case "palette_generated": return 2
-      case "preparing_appearance_assets": return 2
-      case "appearance_assets_ready": return 3
-      case "reconciling_consumers": return 3
-      case "finished": return WALLPAPER_STEPS.length
-      default: return 0
-    }
-  }
-
-  function failureForStage(stage: string): string {
-    switch (stage) {
-      case "setting_wallpaper": return "setting the wallpaper"
-      case "generating_palette": return "generating the color palette"
-      case "palette_generated":
-      case "preparing_appearance_assets": return "preparing effects and icons"
-      case "appearance_assets_ready":
-      case "reconciling_consumers": return "updating desktop apps"
-      default: return "updating the wallpaper appearance"
-    }
-  }
-
   function refreshWallpaperIcon(): void {
     const path = resolveIconPath("wallpaper-progress", "picture")
     if (path !== null && wallpaperIcon !== null) {
@@ -863,37 +805,6 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
       }
     })
   }
-
-  function triggerPhrase(trigger: string): string {
-    switch (trigger) {
-      case "manual": return "Started by you"
-      case "connect": return "Run after connecting"
-      default: return "Scheduled run"
-    }
-  }
-
-  /**
-   * The success body: what was measured, joined the way the mock joins it
-   * ("Canela&Dulce · CableVivo Envigado").
-   *
-   * The spec says to fall back to the trigger phrase when EITHER value is empty.
-   * This keeps whichever half IS known instead, because the rule's stated
-   * purpose is "rather than render a blank": dropping the SSID because the
-   * backend reported no server name would throw away a fact we measured. Only
-   * when NEITHER is present does the line fall back, and then to the trigger
-   * phrase alone.
-   */
-  function speedtestContextLine(
-    terminal?: { ssid?: string; server_name?: string; trigger: string },
-  ): string {
-    const ssid = asText(terminal?.ssid)
-    const server = asText(terminal?.server_name)
-    if (ssid !== "" && server !== "") return `${ssid} · ${server}`
-    if (ssid !== "") return ssid
-    if (server !== "") return server
-    return `${triggerPhrase(terminal?.trigger ?? "")} · also shown in the Wi-Fi panel`
-  }
-
 
   function removeCard(id: number): void {
     const index = cards.findIndex((entry) => entry.id === id)

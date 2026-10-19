@@ -1,0 +1,51 @@
+{
+  "//": [
+    "Typecheck config for the notifications PURE-MODULE unit tests.",
+    "",
+    "WHY IT EXISTS. `ags bundle` transpiles without type-checking, so a pure",
+    "helper that reads fine and is wrong in an edge case is a card that renders",
+    "wrong at runtime. The notifications cards' formatting + stage mapping now",
+    "live in `notifications/lib/card-model.ts` (pure: no `gi://*`, no `ags`),",
+    "so `node --test` runs the suite on a stock runner with no desktop stack.",
+    "",
+    "SEPARATE FROM THE APP CONFIG, ON PURPOSE. This file typechecks the TESTS.",
+    "It needs @types/node for `node:test`/`node:assert`, and",
+    "`allowImportingTsExtensions` because the test files import the module under",
+    "test with an explicit `.ts` suffix (Node's ESM resolver does no",
+    "extensionless lookup). It deliberately does NOT widen to `gi://*` or",
+    "`ags/*`: nothing reachable from here may import GTK, which is what keeps",
+    "the suite runnable on a stock CI runner.",
+    "",
+    "WHERE @types/node COMES FROM. `make notifications-tests` installs it into",
+    "THIS directory's own node_modules on demand (its notifications-tests-deps",
+    "target), exactly as `make ags-test` does for the bar. The install MUST be a",
+    "SIBLING of this config rather than a child: tsc's default typeRoots walk",
+    "starts at the config's own directory and walks UP. tests/node_modules/ is",
+    "gitignored.",
+    "",
+    "`noEmit` is set: nothing here is ever emitted. These files are executed by",
+    "Node, not bundled by ags."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "*.test.ts",
+    "../lib/card-model.ts"
+  ]
+}
