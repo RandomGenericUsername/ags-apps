@@ -1,13 +1,12 @@
 name: hypr-pano
 
-# Per-app CI for hypr-pano (REQ-004): the app's typecheck + drift gate.
+# Per-app CI for hypr-pano (REQ-004): the app's drift gate runs here.
 #
-# Split by runner capability, mirroring bar.yml: `hypr-pano-drift-test` needs
-# only Node + the shared platform client + the canonical `contracts` checkout,
-# so it runs on a stock `ubuntu-latest` runner; `hypr-pano-typecheck` needs
-# `ags` on PATH plus the Astal/GIR libraries and generates ~49 MB of
-# machine-specific .d.ts, so it runs on a `[self-hosted, linux]` runner that
-# HAS the desktop stack.
+# `hypr-pano-drift-test` needs only Node + the shared platform client + the
+# canonical `contracts` checkout, so it runs on a stock `ubuntu-latest` runner.
+# The typecheck (`make hypr-pano-typecheck`) is a LOCAL gate: it needs `ags` on
+# PATH plus the Astal/GIR libraries and generates ~49 MB of machine-specific
+# .d.ts, so it cannot run on a stock runner. See AGENTS.md §4.
 #
 # TRIGGER. This repository's default branch is `main`; PRs from any branch are
 # still checked via `pull_request` (unfiltered).
@@ -31,20 +30,11 @@ jobs:
         with:
           repository: RandomGenericUsername/contracts
           path: contracts
-          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
       - name: Assert the canonical contract is present
         run: |
           if [ ! -f "$GITHUB_WORKSPACE/contracts/event-contract.json" ]; then
-            echo "FAIL: no canonical contract at $GITHUB_WORKSPACE/contracts/event-contract.json -- the contracts checkout did not happen (is CONTRACTS_READ_TOKEN set with read access to the private contracts repo?)" >&2
+            echo "FAIL: no canonical contract at $GITHUB_WORKSPACE/contracts/event-contract.json -- the contracts checkout did not happen" >&2
             exit 1
           fi
       - name: Run the drift gate
         run: CONTRACTS_ROOT="$GITHUB_WORKSPACE/contracts" make hypr-pano-drift-test
-
-  hypr-pano-typecheck:
-    name: hypr-pano-typecheck
-    runs-on: [self-hosted, linux]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Typecheck the hypr-pano tree
-        run: make hypr-pano-typecheck

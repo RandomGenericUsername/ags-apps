@@ -1,16 +1,15 @@
 name: notifications
 
-# Per-app CI for notifications (REQ-002): the app's typecheck + tests + drift +
-# architecture gate.
+# Per-app CI for notifications (REQ-002): the app's tests + drift + architecture
+# gate run here.
 #
-# Split by runner capability, mirroring bar.yml / hypr-pano.yml:
 # `notifications-tests`, `notifications-drift-test` and
 # `speedtest-no-new-architecture` need only Node + the shared platform client +
 # the canonical `contracts` checkout (and python3-stdlib for the last), so they
-# run on a stock `ubuntu-latest` runner; `notifications-typecheck` needs `ags`
-# on PATH plus the Astal/GIR libraries and generates ~49 MB of machine-specific
-# .d.ts, so it runs on a `[self-hosted, linux]` runner that HAS the desktop
-# stack.
+# run on a stock `ubuntu-latest` runner. The typecheck
+# (`make notifications-typecheck`) is a LOCAL gate: it needs `ags` on PATH plus
+# the Astal/GIR libraries and generates machine-specific .d.ts, so it cannot run
+# on a stock runner. See AGENTS.md §4.
 #
 # TRIGGER. This repository's default branch is `main`; PRs from any branch are
 # still checked via `pull_request` (unfiltered).
@@ -45,11 +44,10 @@ jobs:
         with:
           repository: RandomGenericUsername/contracts
           path: contracts
-          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
       - name: Assert the canonical contract is present
         run: |
           if [ ! -f "$GITHUB_WORKSPACE/contracts/event-contract.json" ]; then
-            echo "FAIL: no canonical contract at $GITHUB_WORKSPACE/contracts/event-contract.json -- the contracts checkout did not happen (is CONTRACTS_READ_TOKEN set with read access to the private contracts repo?)" >&2
+            echo "FAIL: no canonical contract at $GITHUB_WORKSPACE/contracts/event-contract.json -- the contracts checkout did not happen" >&2
             exit 1
           fi
       - name: Run the drift gate
@@ -62,11 +60,3 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run the re-homed architecture gate
         run: make speedtest-no-new-architecture
-
-  notifications-typecheck:
-    name: notifications-typecheck
-    runs-on: [self-hosted, linux]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Typecheck the notifications tree
-        run: make notifications-typecheck
