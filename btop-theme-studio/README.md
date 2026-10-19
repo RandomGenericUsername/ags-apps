@@ -69,10 +69,10 @@ make btop-theme-studio-live-tests  # real btop on a pty (needs uv + pyte + btop)
 ```
 
 `btop-theme-studio-tests` is pure (node + python3) and runs in `make gates-ci`;
-`btop-theme-studio-typecheck` needs the machine's GIR types and runs on the
-self-hosted CI job. `btop-theme-studio-live-tests` is deliberately NOT in
-`gates-ci`: it needs a real btop binary, `uv` and `pyte`, so it runs on the
-self-hosted job (or by hand).
+`btop-theme-studio-typecheck` needs the machine's GIR types and is a local
+gate (never a CI job). `btop-theme-studio-live-tests` is deliberately NOT in
+`gates-ci`: it needs a real btop binary, `uv` and `pyte`, so it runs by hand
+on a machine with that stack.
 
 ## Key decisions
 

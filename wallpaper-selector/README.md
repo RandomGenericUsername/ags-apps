@@ -53,7 +53,7 @@ make wallpaper-selector-drift-test   shared event client <-> contracts drift
 
 `wallpaper-selector-tests` and `wallpaper-selector-drift-test` are pure and
 run in `make gates-ci`; `wallpaper-selector-typecheck` needs the machine's
-GIR types and runs on the self-hosted CI job.
+GIR types and is local-only (never a CI job).
 
 Provisioned as `<install>/config/ags-wallpaper-selector/` with launcher
 `wallpaper-selector-ui` (SUPER+W).

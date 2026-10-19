@@ -213,7 +213,7 @@ ags-test: ags-platform-dev ags-test-deps
 #
 # The app-local Makefile was dropped on the move (bar/ ships none): the gates
 # live here, mirroring bar. `hypr-pano-typecheck` needs the desktop stack
-# (machine-specific @girs/), so it runs on the self-hosted CI job;
+# (machine-specific @girs/), so it is a local gate (not a CI job);
 # `hypr-pano-drift-test` is pure (node + the shared client) and runs on a stock
 # runner.
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ hypr-pano-drift-test: ags-platform-dev
 #
 # Mirrors bar/ and hypr-pano/: the app-local Makefile was dropped on the move.
 # `notifications-typecheck` needs the desktop stack (machine-specific @girs/),
-# so it runs on the self-hosted CI job; `notifications-tests` and
+# so it is a local gate (not a CI job); `notifications-tests` and
 # `notifications-drift-test` are pure (node + the shared client) and run on a
 # stock runner.
 # ---------------------------------------------------------------------------
@@ -373,7 +373,7 @@ notifications-drift-test: ags-platform-dev
 #
 # Mirrors bar/ / hypr-pano/ / notifications/: the app-local Makefile was dropped
 # on the move. `capture-tool-typecheck` needs the desktop stack (machine-specific
-# @girs/), so it runs on the self-hosted CI job; `capture-tool-tests` is pure
+# @girs/), so it is a local gate (not a CI job); `capture-tool-tests` is pure
 # (node --test over the app's domain modules + source-text acceptance checks) and
 # runs on a stock runner.
 #
@@ -489,7 +489,7 @@ capture-tool-backend-tests:
 #
 # Mirrors bar/ / hypr-pano/ / notifications/ / capture-tool/: the app-local
 # Makefile was dropped on the move. `wallpaper-selector-typecheck` needs the
-# desktop stack (machine-specific @girs/), so it runs on the self-hosted CI job;
+# desktop stack (machine-specific @girs/), so it is a local gate (not a CI job);
 # `wallpaper-selector-tests` and `wallpaper-selector-drift-test` are pure (node +
 # the shared client) and run on a stock runner.
 # ---------------------------------------------------------------------------
@@ -569,7 +569,7 @@ wallpaper-selector-drift-test: ags-platform-dev
 # wallpaper-selector/: the app-local Makefile was dropped on the move (its
 # targets are re-homed here, not deleted: the seven pure suites the old `make
 # test` ran still run, now from the repo root). `icme-typecheck` needs the
-# desktop stack (machine-specific @girs/), so it runs on the self-hosted CI job;
+# desktop stack (machine-specific @girs/), so it is a local gate (not a CI job);
 # `icme-tests` and `icme-drift-test` are pure (node + the shared client) and run
 # on a stock runner.
 # ---------------------------------------------------------------------------
@@ -651,11 +651,11 @@ icme-drift-test: ags-platform-dev
 #
 # Mirrors bar/ / hypr-pano/ / notifications/ / capture-tool/ /
 # wallpaper-selector/ / icme/: the app-local Makefile was dropped on the move.
-# `btop-theme-studio-typecheck` needs `ags` + the GIR types, so it runs on the
-# self-hosted CI job. `btop-theme-studio-tests` and
+# `btop-theme-studio-typecheck` needs `ags` + the GIR types, so it is a local
+# gate (never a CI job). `btop-theme-studio-tests` and
 # `btop-theme-studio-drift-test` are pure (node + python3) and run on a stock
 # runner in `gates-ci`. `btop-theme-studio-live-tests` needs the real btop
-# binary + uv + pyte, so it stays a self-hosted/manual target.
+# binary + uv + pyte, so it stays a manual target.
 # ---------------------------------------------------------------------------
 BTOP_TESTS := $(BTOP_DIR)/tests
 
@@ -846,14 +846,14 @@ audio-seek-stability-test:
 # render gate, then the symbol check, then the tree typecheck. Mirrors dotfiles'
 # audio-panel-gates, with `ags-typecheck` mapped to this repo's `bar-typecheck`.
 # NOT in gates-ci: bar-typecheck needs the desktop stack (machine-specific
-# @girs/), so it runs on the self-hosted CI job, never on the stock runner.
+# @girs/), so it is a local gate (not a CI job), never on the stock runner.
 audio-panel-gates: audio-core-test audio-presentation-test pipewire-adapter-test \
 	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
 	audio-mock-parity ags-symbol-check bar-typecheck
 
 # The stock-runner subset: every gate that can run without the desktop stack.
 # bar-typecheck needs `ags` + Astal/GIR libraries (machine-specific @girs/),
-# so it runs on the self-hosted CI job, never here.
+# so it is a local gate (not a CI job), never here.
 #
 # NOTE: icons-json-drift reads the authored icons.yaml + role var from a sibling
 # dotfiles-v3 checkout (read-only) and needs PyYAML; see that target. Every other
@@ -865,41 +865,41 @@ BAR_GUARDS := icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mo
 
 # hypr-pano's pure gate (REQ-004): the repointed drift test needs only node + the
 # shared client, so it belongs on the stock runner. `hypr-pano-typecheck` needs
-# the desktop stack and runs on the self-hosted CI job, never here.
+# the desktop stack and is local-only, never here.
 PANO_GUARDS := hypr-pano-drift-test
 
 # The notifications pure gates (REQ-002): the re-homed architecture guard (and,
 # once wired, the drift/unit gates) need only node/python-stdlib, so they belong
 # on the stock runner. `notifications-typecheck` needs the desktop stack and
-# runs on the self-hosted CI job, never here.
+# is local-only, never here.
 NOTIF_GUARDS := speedtest-no-new-architecture notifications-tests notifications-drift-test
 
 # The capture-tool pure gates (REQ-003): the domain unit tests + the
 # platform-consumption acceptance need only node + the app's own sources, and
 # the relocated Python backend suites need only python3 + uv, so both belong on
-# the stock runner. `capture-tool-typecheck` needs the desktop stack and runs on
-# the self-hosted CI job, never here. There is no drift gate: the app consumes no
+# the stock runner. `capture-tool-typecheck` needs the desktop stack and is
+# local-only, never here. There is no drift gate: the app consumes no
 # contract topic (see the capture-tool Makefile section).
 CAPTURE_GUARDS := capture-tool-tests capture-tool-backend-tests
 
 # The wallpaper-selector pure gates (REQ-005): the model unit suite and the
 # repointed drift gate need only node + the shared client, so they belong on the
-# stock runner. `wallpaper-selector-typecheck` needs the desktop stack and runs
-# on the self-hosted CI job, never here.
+# stock runner. `wallpaper-selector-typecheck` needs the desktop stack and is
+# local-only, never here.
 WALLPAPER_GUARDS := wallpaper-selector-tests wallpaper-selector-drift-test
 
 # The icme pure gates (REQ-006): the library suites, the `icme.saved` publisher
 # smoke and the repointed drift gate need only node + the shared client +
 # the canonical `contracts` checkout, so they belong on the stock runner.
-# `icme-typecheck` needs the desktop stack and runs on the self-hosted CI job.
+# `icme-typecheck` needs the desktop stack and is local-only (never a CI job).
 ICME_GUARDS := icme-tests icme-drift-test
 
 # The btop-theme-studio pure gates (REQ-007, slice 8.1): the library suites,
 # the platform-consumption acceptance checks and the generated key->widget
 # drift re-derivation need only node + python3, so they belong on the stock
-# runner. `btop-theme-studio-typecheck` needs the desktop stack and runs on the
-# self-hosted CI job; `btop-theme-studio-live-tests` needs a real btop binary
-# and is never a stock-runner gate.
+# runner. `btop-theme-studio-typecheck` needs the desktop stack and is a local
+# gate (never a CI job); `btop-theme-studio-live-tests` needs a real btop
+# binary and is never a stock-runner gate.
 BTOP_GUARDS := btop-theme-studio-tests btop-theme-studio-drift-test
 
 gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS) $(ICME_GUARDS) $(BTOP_GUARDS)

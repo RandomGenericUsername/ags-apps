@@ -1,15 +1,13 @@
 name: btop-theme-studio
 
-# Per-app CI for btop-theme-studio (REQ-007, slice 8.1): the studio's typecheck
-# + pure suites + generated key->widget drift gate.
+# Per-app CI for btop-theme-studio (REQ-007, slice 8.1): the studio's pure
+# suites + generated key->widget drift gate run here.
 #
-# Split by runner capability, mirroring bar.yml / hypr-pano.yml /
-# notifications.yml / capture-tool.yml / wallpaper-selector.yml / icme.yml:
 # `btop-theme-studio-tests` and `btop-theme-studio-drift-test` need only Node +
 # Python 3 (the vendored map verifier), so they run on a stock `ubuntu-latest`
-# runner; `btop-theme-studio-typecheck` needs `ags` on PATH plus the GIR/Astal
-# libraries and generates machine-specific .d.ts, so it runs on a
-# `[self-hosted, linux]` runner that HAS the desktop stack.
+# runner. The typecheck (`make btop-theme-studio-typecheck`) is a LOCAL gate: it
+# needs `ags` on PATH plus the GIR/Astal libraries and generates
+# machine-specific .d.ts, so it cannot run on a stock runner. See AGENTS.md §4.
 #
 # The live-preview engine suite (`make btop-theme-studio-live-tests`) needs a
 # real btop binary + uv + pyte; it is deliberately not a CI gate.
@@ -47,11 +45,3 @@ jobs:
           python-version: "3.12"
       - name: Re-derive the key->widget map from the vendored btop sources
         run: make btop-theme-studio-drift-test
-
-  btop-theme-studio-typecheck:
-    name: btop-theme-studio-typecheck
-    runs-on: [self-hosted, linux]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Typecheck the btop-theme-studio tree
-        run: make btop-theme-studio-typecheck
