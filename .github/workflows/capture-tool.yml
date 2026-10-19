@@ -1,0 +1,40 @@
+name: capture-tool
+
+# Per-app CI for capture-tool (REQ-003): the app's typecheck + tests gates.
+#
+# Split by runner capability, mirroring bar.yml / hypr-pano.yml /
+# notifications.yml: `capture-tool-tests` needs only Node + tsc (stock
+# `ubuntu-latest` runner), while `capture-tool-typecheck` needs `ags` on PATH
+# plus the Astal/GIR libraries and generates ~49 MB of machine-specific .d.ts —
+# so it runs on a `[self-hosted, linux]` runner that HAS the desktop stack.
+#
+# There is no drift job: capture-tool consumes no contract topic, so it carries
+# no `event-contract-drift.mjs` (see the capture-tool section of the Makefile).
+#
+# TRIGGER. This repository's default branch is `main`; PRs from any branch are
+# still checked via `pull_request` (unfiltered).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  capture-tool-tests:
+    name: capture-tool-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run the capture-tool pure-module unit tests + acceptance
+        run: make capture-tool-tests
+
+  capture-tool-typecheck:
+    name: capture-tool-typecheck
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck the capture-tool tree
+        run: make capture-tool-typecheck

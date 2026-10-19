@@ -1,6 +1,7 @@
 .PHONY: help typecheck test bar-types ags-platform-dev bar-typecheck ags-test ags-test-deps gates-ci \
 	hypr-pano-types hypr-pano-typecheck hypr-pano-drift-test \
 	notifications-typecheck notifications-tests notifications-drift-test speedtest-no-new-architecture \
+	capture-tool-types capture-tool-typecheck capture-tool-tests capture-tool-tests-deps \
 	icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity audio-mock-parity \
 	ags-symbol-check audio-core-test audio-presentation-test pipewire-adapter-test \
 	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
@@ -9,6 +10,7 @@
 BAR_DIR := bar
 PANO_DIR := hypr-pano
 NOTIF_DIR := notifications
+CAPTURE_DIR := capture-tool
 AGS_TESTS := $(BAR_DIR)/tests
 AGS_TS_TESTS := $(AGS_TESTS)/ts
 AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
@@ -40,6 +42,10 @@ help:
 	@echo "notifications-tests         pure-module unit tests (stock runner)"
 	@echo "notifications-drift-test    shared event client <-> contracts drift + card model"
 	@echo "speedtest-no-new-architecture   re-homed notifications architecture guard"
+	@echo ""
+	@echo "capture-tool (REQ-003, slice 5):"
+	@echo "capture-tool-typecheck      tsc --noEmit on capture-tool/ (needs the desktop stack)"
+	@echo "capture-tool-tests          domain unit tests + platform-consumption acceptance (stock runner)"
 	@echo ""
 	@echo "re-homed bar guards (ticket/bar7-rehome-guards):"
 	@echo "icons-json-drift        bar/icons.json == role projection of icons.yaml"
@@ -337,6 +343,110 @@ notifications-drift-test: ags-platform-dev
 	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(NOTIF_DIR)/tests/event-contract-drift.mjs
 
 # ---------------------------------------------------------------------------
+# capture-tool (REQ-003, slice 5) -- per-app typecheck + tests gates.
+#
+# Mirrors bar/ / hypr-pano/ / notifications/: the app-local Makefile was dropped
+# on the move. `capture-tool-typecheck` needs the desktop stack (machine-specific
+# @girs/), so it runs on the self-hosted CI job; `capture-tool-tests` is pure
+# (node --test over the app's domain modules + source-text acceptance checks) and
+# runs on a stock runner.
+#
+# NO DRIFT GATE. hypr-pano / notifications each carry an
+# `event-contract-drift.mjs` because they CONSUME the shared event client (AD-5).
+# capture-tool has no event reader -- it neither publishes nor subscribes to a
+# contract topic -- so there is no client<->contract surface to pin. The one
+# event client (AD-5) is the platform's; capture-tool would import it if it ever
+# needed a topic. `capture-tool/tests/ts/platform-consumption.test.ts` pins that
+# no bespoke event client grows here.
+# ---------------------------------------------------------------------------
+
+CAPTURE_TESTS := $(CAPTURE_DIR)/tests
+CAPTURE_TSCONFIG_TESTS := $(CAPTURE_TESTS)/tsconfig.tests.json
+
+# capture-tool-types -- generate this machine's GIR declarations in-tree, the
+# same shape as bar-types / hypr-pano-types / notifications-types. `ags types -d
+# capture-tool -u` writes capture-tool/@girs/, capture-tool/env.d.ts and a
+# colliding capture-tool/tsconfig.json (the committed config is
+# tsconfig.capture.json precisely so it survives).
+capture-tool-types:
+	@if [ -d "$(CAPTURE_DIR)/@girs" ]; then \
+		echo "==> capture-tool-types: @girs/ already generated, skipping (rm -rf $(CAPTURE_DIR)/@girs to force)"; \
+	else \
+		echo "==> capture-tool-types: generating GIR types (~2-4 min, needs network, requires the desktop stack)"; \
+		ags types -d "$(CURDIR)/$(CAPTURE_DIR)" -u || exit 1; \
+	fi
+
+# capture-tool-typecheck -- ZERO errors allowed in capture-tool/. Error buckets
+# mirror bar-typecheck: fail on errors in THIS repo's tree; tolerate and count
+# the AGS runtime's own (/usr/share/ags/js/) and the external platform unit's
+# (AD-17). capture-tool's committed config resolves `ags`/`gnim` through the
+# per-directory node_modules symlinks below (it carries no `paths` map, unlike
+# the bar/pano/notifications configs).
+capture-tool-typecheck: ags-platform-dev capture-tool-types
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> capture-tool-typecheck: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@mkdir -p "$(CAPTURE_DIR)/node_modules"
+	@[ -e "$(CAPTURE_DIR)/node_modules/ags" ] || ln -sfn /usr/share/ags/js "$(CAPTURE_DIR)/node_modules/ags"
+	@[ -e "$(CAPTURE_DIR)/node_modules/gnim" ] || ln -sfn /usr/share/ags/js/node_modules/gnim "$(CAPTURE_DIR)/node_modules/gnim"
+	@echo "==> capture-tool-typecheck: tsc --noEmit -p $(CAPTURE_DIR)/tsconfig.capture.json"
+	@log=$$(mktemp); \
+	npx tsc --noEmit -p "$(CAPTURE_DIR)/tsconfig.capture.json" > "$$log" 2>&1; \
+	ours=$$(grep 'error TS' "$$log" | grep -F "$(CAPTURE_DIR)/" | grep -vF 'ags-platform/' || true); \
+	thirdparty=$$(grep 'error TS' "$$log" | grep -F '/usr/share/ags/js/' || true); \
+	platform=$$(grep 'error TS' "$$log" | grep -F 'ags-platform/' || true); \
+	other=$$(grep 'error TS' "$$log" | grep -vF "$(CAPTURE_DIR)/" | grep -vF '/usr/share/ags/js/' | grep -vF 'ags-platform/' || true); \
+	echo "    tolerated third-party errors (/usr/share/ags/js): $$(printf '%s\n' "$$thirdparty" | grep -c . || true)"; \
+	echo "    tolerated ags-platform errors (external unit, AD-17): $$(printf '%s\n' "$$platform" | grep -c . || true)"; \
+	if [ -n "$$other" ]; then \
+		echo "FAIL: errors in neither the capture-tool tree nor the known ags runtime:"; \
+		printf '%s\n' "$$other"; rm -f "$$log"; exit 1; \
+	fi; \
+	if [ -n "$$ours" ]; then \
+		echo "FAIL: type errors in $(CAPTURE_DIR):"; \
+		printf '%s\n' "$$ours"; rm -f "$$log"; exit 1; \
+	fi; \
+	echo "    OK: 0 errors in $(CAPTURE_DIR)"; \
+	rm -f "$$log"
+
+# capture-tool-tests-deps -- @types/node under $(CAPTURE_TESTS)/, a SIBLING of
+# $(CAPTURE_TSCONFIG_TESTS) so tsc's typeRoots walk finds it (TS2688 otherwise).
+# The app config pins `"types": []` (it runs under GJS), so this install must
+# also stay OUT of the app config's upward typeRoots walk — a sibling of the
+# tests config, below the app config's own directory, is exactly that. The
+# separate npm project (--prefix, no package.json) cannot prune the root one.
+# Gitignored.
+capture-tool-tests-deps:
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> capture-tool-tests: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@if [ ! -d $(CAPTURE_TESTS)/node_modules/@types/node ]; then \
+		echo "==> capture-tool-tests: installing @types/node under $(CAPTURE_TESTS)/ (gitignored)"; \
+		npm install --no-save --no-package-lock --prefix "$(CURDIR)/$(CAPTURE_TESTS)" @types/node@24 >/dev/null || exit 1; \
+	fi
+
+# capture-tool-tests -- the app's PURE domain unit tests (settings, ui-state,
+# cli-args, monitor-registry) plus the window-identity / state-ownership /
+# custom-duration wiring checks and the REQ-003 platform-consumption acceptance.
+# No desktop stack: the domain modules import nothing from `ags/*` or `gi://*`,
+# and the wiring checks read the app's own source text. `resolve-hooks.mjs`
+# teaches `node --test` the extensionless relative imports `ags bundle` already
+# resolves. The app config's `--listFiles` compiler-evidence case needs only the
+# tests config's @types/node (the positive control); it tolerates a missing
+# @girs/ the same way it does today.
+capture-tool-tests: capture-tool-tests-deps
+	@command -v node >/dev/null || { echo "FAIL: capture-tool-tests: node is not on PATH" >&2; exit 1; }
+	@[ -x node_modules/.bin/tsc ] || { echo "FAIL: capture-tool-tests: typescript missing after capture-tool-tests-deps" >&2; exit 1; }
+	@[ -d $(CAPTURE_TESTS)/node_modules/@types/node ] || { echo "FAIL: capture-tool-tests: @types/node missing after capture-tool-tests-deps" >&2; exit 1; }
+	@echo "==> capture-tool-tests: node --import $(CAPTURE_TESTS)/ts/resolve-hooks.mjs --test $(CAPTURE_TESTS)/ts/*.test.ts"
+	node --import ./$(CAPTURE_TESTS)/ts/resolve-hooks.mjs --test $(CAPTURE_TESTS)/ts/*.test.ts
+	@echo "==> capture-tool-tests: tsc --noEmit -p $(CAPTURE_TSCONFIG_TESTS)"
+	npx tsc --noEmit -p "$(CAPTURE_TSCONFIG_TESTS)" || exit 1
+	@echo "    OK: 0 type errors in the capture-tool pure-module unit tests"
+
+# ---------------------------------------------------------------------------
 # Re-homed notifications guard (REQ-002, slice 4; ticket/notif4-migrate).
 #
 # `speedtest-no-new-architecture` was authored in dotfiles-v3 against
@@ -475,4 +585,11 @@ PANO_GUARDS := hypr-pano-drift-test
 # runs on the self-hosted CI job, never here.
 NOTIF_GUARDS := speedtest-no-new-architecture notifications-tests notifications-drift-test
 
-gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS)
+# The capture-tool pure gate (REQ-003): the domain unit tests + the
+# platform-consumption acceptance need only node + the app's own sources, so it
+# belongs on the stock runner. `capture-tool-typecheck` needs the desktop stack
+# and runs on the self-hosted CI job, never here. There is no drift gate: the
+# app consumes no contract topic (see the capture-tool Makefile section).
+CAPTURE_GUARDS := capture-tool-tests
+
+gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS)
