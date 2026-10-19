@@ -11,7 +11,7 @@
 // nothing would go red.
 //
 // `domain/settings.ts` is pure (no `gi://`, no `ags/*`, no I/O), so it loads
-// under plain Node with no GTK, no GJS and no browser. See the `capture-test`
+// under plain Node with no GTK, no GJS and no browser. See the `capture-tool-tests`
 // Makefile target for the runner.
 //
 // Test naming follows `node:test`: `*.test.ts`, discovered by `node --test`.

@@ -37,7 +37,7 @@
 //      tsconfig.tests.json. That is a dependency gap, not an environment
 //      condition, and hiding it in a skip meant the gate reported 114/1 instead
 //      of 115/0 while its own tsc pass could not run at all. `make capture-tool-tests`
-//      now declares and installs both (its `capture-test-deps` target), so an
+//      now declares and installs both (its `capture-tool-tests-deps` target), so an
 //      unresolvable tsc inside this gate is a real failure and is reported as
 //      one, with the fix named in the message.
 //
@@ -52,7 +52,7 @@
 // unresolved `ags/*` and `gi://*` specifiers rather than defects. Asserting the
 // whole program would make this case desktop-only, which is `make
 // capture-typecheck`'s job and which asserts the same property STRICTLY harder:
-// it fails on any error under src/gui-tools/capture-tool/ *and* on any error in
+// it fails on any error under capture-tool/ *and* on any error in
 // neither the capture tool nor the known ags runtime. What this case owns is the
 // ambient-type surface, so that is what it measures, over the desktop-free layer
 // (`domain/`, `ports/`, `types.ts` — measured 0 errors with and without @girs)
@@ -160,7 +160,7 @@ test("tests config still asks for node types by name", () => {
 
 test("app program contains no @types/node files (real compiler evidence)", () => {
   // The compiler is a DECLARED dependency of this gate now (see
-  // `capture-test-deps` in the Makefile), so its absence is a broken gate, not
+  // `capture-tool-tests-deps` in the Makefile), so its absence is a broken gate, not
   // an unsupported environment. Failing here — loudly, with the fix — is the
   // whole point: the previous `t.skip` made a clean checkout look green at
   // 114/1 while the one assertion that measures the real compiler never ran.
@@ -173,7 +173,7 @@ test("app program contains no @types/node files (real compiler evidence)", () =>
     tsc,
     "tsc is not resolvable at node_modules/.bin/tsc, so the compiler-evidence " +
       "check cannot run. Run `make capture-tool-tests`, which installs typescript and " +
-      "@types/node on demand (capture-test-deps). This gate does not skip when a " +
+      "@types/node on demand (capture-tool-tests-deps). This gate does not skip when a " +
       "declared dependency is missing.",
   )
 
@@ -248,7 +248,7 @@ test("app program contains no @types/node files (real compiler evidence)", () =>
   // unresolved `ags/`+`gi://` specifiers, not defects. Asserting the whole
   // program here would make this case desktop-only, which is capture-typecheck's
   // job and which asserts this strictly more strongly anyway: it fails on any
-  // error under src/gui-tools/capture-tool/ AND on any error in neither the
+  // error under capture-tool/ AND on any error in neither the
   // capture tool nor the known ags runtime. See the `capture-typecheck` target.
   const errorLines = (res.stdout + res.stderr)
     .split("\n")
