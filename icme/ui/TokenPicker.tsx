@@ -1,11 +1,13 @@
 import { Gtk } from "ags/gtk4";
-import { createEffect, type Accessor } from "ags";
+import { createEffect } from "ags";
 
 export interface TokenPickerProps {
-  palette: Accessor<Record<string, string>>;
-  missingTokens: Accessor<string[]>;
-  placeholder: Accessor<string | null>;
-  currentToken: Accessor<string | null>;
+  // Read-only derivations from the caller: callables, not state handles. The
+  // editor passes plain getters over its own state (they are only read here).
+  palette: () => Record<string, string>;
+  missingTokens: () => string[];
+  placeholder: () => string | null;
+  currentToken: () => string | null;
   onPick(token: string): void;
 }
 

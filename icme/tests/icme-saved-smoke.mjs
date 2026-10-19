@@ -1,29 +1,33 @@
-// End-to-end-ish smoke for ICME `icme.saved` (Phase 5, 5-4 follow-up).
+// End-to-end-ish smoke for ICME `icme.saved`.
 //
 // No live bus: the hub `Emit` call is mocked at the transport seam and the
-// published topic/payload shape is asserted against the contract. This also
-// pins that `EditorWindow.save()` is wired to the helper (structural check,
-// since the GTK window cannot be imported under plain node).
+// published topic/payload shape is asserted against the VENDORED generated
+// binding. This also pins that `EditorWindow.save()` is wired to the helper
+// (structural check, since the GTK window cannot be imported under plain node).
 //
-//   node tests/icme-saved-smoke.mjs   (from the tool directory)
+// The publisher core is PURE (`../lib/icme-saved.ts`): it reads the topic and
+// payload type from the vendored generated binding and the `Emit` method name
+// from the one shared event client. The Gio seam is `../lib/icme-saved-gio.ts`.
+//
+// The canonical contract comparison lives in `event-contract-drift.mjs`; this
+// suite deliberately reads no cross-repo checkout, so `make icme-tests` runs on
+// a stock runner with just this repo.
+//
+//   node tests/icme-saved-smoke.mjs   (from the repo root)
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   EMIT_METHOD,
-  EVENTS_BUS_NAME,
-  EVENTS_INTERFACE,
   ICME_SAVED_TOPIC,
   buildIcmeSavedEmit,
   publishIcmeSavedVia,
-} from "../lib/event-contract.ts";
+} from "../lib/icme-saved.ts";
+import { EVENTS_TOPICS } from "../lib/generated/contract.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", "..", "..", "..");
-const contract = JSON.parse(
-  readFileSync(join(repoRoot, "contracts", "event-contract.json"), "utf-8"),
-);
+const icmeDir = join(here, "..");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -37,13 +41,12 @@ function check(name, actual, expected) {
   }
 }
 
-// The emit shape is the contract topic + `{ path }` payload.
+// The emit shape is the generated topic + `{ path }` payload.
 check("topic is icme.saved", ICME_SAVED_TOPIC, "icme.saved");
+check("topic is declared by the generated binding", EVENTS_TOPICS[ICME_SAVED_TOPIC] !== undefined, true);
 check("build emit topic", buildIcmeSavedEmit("/x/icons.yaml").topic, "icme.saved");
 check("build emit payload", buildIcmeSavedEmit("/x/icons.yaml").payload, { path: "/x/icons.yaml" });
-check("contract topic payload is {path:s}", contract.topics[ICME_SAVED_TOPIC].payload, { path: "s" });
-check("Emit method is the contract method", contract.methods[EMIT_METHOD] !== undefined, true);
-check("transport targets the hub", [EVENTS_BUS_NAME, EVENTS_INTERFACE], ["org.dotfiles.Events", "org.dotfiles.Events1"]);
+check("Emit is the shared client's method name", EMIT_METHOD, "Emit");
 
 // Mocked bus: a successful save publishes exactly one correct event.
 {
@@ -62,10 +65,16 @@ check("transport targets the hub", [EVENTS_BUS_NAME, EVENTS_INTERFACE], ["org.do
   check("empty path publishes nothing", calls.length, 0);
 }
 
-// EditorWindow.save() must call the helper with the saved manifest path.
+// EditorWindow.save() must call the helper with the saved manifest path, and
+// the helper must be the Gio seam over the pure publisher.
 {
-  const source = readFileSync(join(here, "..", "ui", "EditorWindow.tsx"), "utf-8");
+  const source = readFileSync(join(icmeDir, "ui", "EditorWindow.tsx"), "utf-8");
   check("EditorWindow.save publishes on save", source.includes("publishIcmeSaved(next.iconsYaml)"), true);
+  check(
+    "EditorWindow imports the Gio publisher seam",
+    /from\s+"\.\.\/lib\/icme-saved-gio"/.test(source),
+    true,
+  );
 }
 
 if (failures > 0) {

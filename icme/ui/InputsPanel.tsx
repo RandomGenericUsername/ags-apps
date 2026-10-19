@@ -5,7 +5,7 @@ import { isSpinePath, type EditorInputs } from "../lib/inputs";
 
 export interface InputsPanelProps {
   inputs: Accessor<EditorInputs>;
-  pendingCount: Accessor<number>;
+  pendingCount: () => number;
   defaults: EditorInputs;
   onChange(inputs: EditorInputs): void;
   onReset(): void;

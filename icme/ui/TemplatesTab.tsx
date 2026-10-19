@@ -1,4 +1,5 @@
 import { Gdk, Gtk } from "ags/gtk4";
+import GdkPixbuf from "gi://GdkPixbuf?version=2.0";
 import Rsvg from "gi://Rsvg?version=2.0";
 import Pango from "gi://Pango?version=1.0";
 import { createEffect, createState, type Accessor } from "ags";
@@ -62,7 +63,7 @@ export interface TemplatesTabProps {
 
 type Choice =
   | { kind: "existing"; ph: string }
-  | { kind: "new"; name: string; token: string }
+  | { kind: "new"; name: string; token?: string }
   | null;
 
 export function TemplatesTab(props: TemplatesTabProps) {
@@ -622,7 +623,8 @@ export function TemplatesTab(props: TemplatesTabProps) {
       const hex = hexOfToken(token ?? "");
       const isCur = shape?.ph === name;
       const isNew = props.newPlaceholders().has(name);
-      const picked = choice()?.kind === "existing" && choice()?.ph === name;
+      const active = choice();
+      const picked = active?.kind === "existing" && active.ph === name;
       const chip = new Gtk.Box({ css_classes: ["chip"] });
       chip.set_size_request(20, 20);
       const provider = new Gtk.CssProvider();
@@ -672,7 +674,8 @@ export function TemplatesTab(props: TemplatesTabProps) {
       .filter((k) => /^color\d+$/.test(k))
       .sort((a, b) => Number(a.slice(5)) - Number(b.slice(5)));
     colorKeys.forEach((token, i) => {
-      const picked = choice()?.kind === "new" && choice()?.token === token;
+      const active = choice();
+      const picked = active?.kind === "new" && active.token === token;
       const cell = new Gtk.Button({
         css_classes: ["cell", ...(picked ? ["picked"] : [])],
         width_request: 30,
@@ -702,8 +705,9 @@ export function TemplatesTab(props: TemplatesTabProps) {
 
   newNameEntry.connect("changed", () => {
     const text = newNameEntry.get_text();
-    if (choice()?.kind === "new") {
-      const token = choice()?.token;
+    const active = choice();
+    if (active?.kind === "new") {
+      const token = active.token;
       setChoice(text.trim() === "" ? null : { kind: "new", name: text.trim().toUpperCase(), token });
     } else {
       setChoice(null);
@@ -714,8 +718,9 @@ export function TemplatesTab(props: TemplatesTabProps) {
   newNameEntry.connect("activate", () => {
     const name = newNameEntry.get_text().trim().toUpperCase();
     if (!selectedId() || !isValidPlaceholderName(name)) return;
-    if (choice()?.kind === "existing") return;
-    const token = choice()?.kind === "new" ? choice()?.token : undefined;
+    const active = choice();
+    if (active?.kind === "existing") return;
+    const token = active?.kind === "new" ? active.token : undefined;
     setChoice({ kind: "new", name, token });
     setNewName(name);
     assign();

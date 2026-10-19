@@ -56,6 +56,19 @@ export interface VocabularyPendingEdit {
   token: string;
 }
 
+/**
+ * One placeholder→token entry as the manifest/CLI reports it. `origin` names
+ * where the effective value came from: the vocabulary defaults, the group
+ * mapping, or a variant override. Pure (no GJS), so the node suites import it.
+ */
+export type MappingOrigin = "vocabulary" | "group" | "variant";
+
+export interface MergedEntry {
+  placeholder: string;
+  token: string;
+  origin: MappingOrigin;
+}
+
 export function vocabularyKeyOf(edit: VocabularyPendingEdit): string {
   return `defaults\u0000${edit.placeholder}`;
 }

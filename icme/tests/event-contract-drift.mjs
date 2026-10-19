@@ -1,35 +1,62 @@
-// Cross-language contract drift + bar hydration core (Phase 5 follow-up).
+// Contract drift gate for ICME (the icon colour mapping editor).
 //
-// Executes the machine definitions (`contracts/event-contract.json` and
-// `.xml`) against the GJS/bar and ICME baked constants, then exercises the
-// bar's subscribe-before-read hydration state machine with a scripted fake
-// transport (no live bus). This replaces the Python textual literal scan for
-// these two consumers with an executed, import-based gate.
+// Pins the SHARED platform event client (spine AD-5, `ags-platform/ports/
+// event-client`), the VENDORED generated binding (`lib/generated/contract.ts`)
+// and the app's `icme.saved` publisher against the canonical contract
+// (`contracts/event-contract.json` / `.xml`). It also exercises the shared
+// subscribe-before-read hydration state machine for `wallpaper.state` with a
+// scripted fake transport (no live bus), and asserts the structural facts
+// REQ-006 turns on: the event-bus / event-contract / theme copies are gone and
+// the platform + generated bindings are used. Executed, never text-scanned --
+// except the structural source reads, which are labelled as such.
 //
-// Run with plain node via the existing runner:
-//   node tests/event-contract-drift.mjs   (from the tool directory)
-//
-// Cross-package note: the bar has no node test runner of its own, so the
-// platform's pure event-client (now the EXTERNAL bare specifier
-// `ags-platform/ports/event-client`, spine AD-17) is imported here and executed
-// by the existing ICME node runner instead of inventing a second one. The
-// specifier resolves through the dev `node_modules/ags-platform` shortcut that
-// `make ags-platform-dev` creates at the repo root (this suite is run by
-// `per-app-drift-symbol-suites`, which depends on that target).
+// Run from the repo root:  make icme-drift-test
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as bar from "ags-platform/ports/event-client";
-import * as icme from "../lib/event-contract.ts";
-import * as icmeConsumer from "../lib/event-bus-core.ts";
+// The ONE event client: the app-local event-bus core is gone, so this gate
+// reads the platform's shared client through the dev `node_modules/ags-platform`
+// shortcut `make ags-platform-dev` creates (its target sits outside
+// node_modules so Node's type-stripping accepts the `.ts` source).
+import * as core from "ags-platform/ports/event-client";
+import * as saved from "../lib/icme-saved.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", "..", "..", "..");
+const icmeDir = join(here, "..");
+
+// The canonical contract lives in the sibling `contracts` repo (AGENTS: every
+// app depends on `ags-platform` and `contracts`). `CONTRACTS_REPO` overrides
+// the location (the Makefile and CI set it); otherwise search upward for a
+// checkout. A missing contract FAILS -- never a silent skip: a drift gate that
+// cannot read the contract proves nothing.
+function findContractsRepo() {
+  const override = process.env.CONTRACTS_REPO;
+  if (override) return override;
+  let dir = here;
+  for (let i = 0; i < 8; i += 1) {
+    dir = dirname(dir);
+    if (existsSync(join(dir, "contracts", "event-contract.json"))) {
+      return join(dir, "contracts");
+    }
+  }
+  return null;
+}
+
+const contractsRepo = findContractsRepo();
+if (contractsRepo === null) {
+  console.error(
+    "FAIL: cannot find the `contracts` repo (set CONTRACTS_REPO=/path/to/contracts)",
+  );
+  process.exit(1);
+}
 const contractJson = JSON.parse(
-  readFileSync(join(repoRoot, "contracts", "event-contract.json"), "utf-8"),
+  readFileSync(join(contractsRepo, "event-contract.json"), "utf-8"),
 );
-const contractXml = readFileSync(join(repoRoot, "contracts", "event-contract.xml"), "utf-8");
+const contractXml = readFileSync(
+  join(contractsRepo, "event-contract.xml"),
+  "utf-8",
+);
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -43,88 +70,100 @@ function check(name, actual, expected) {
   }
 }
 
-function xmlInterfaceName(xml) {
-  const match = xml.match(/<interface\s+name="([^"]+)"/);
-  return match ? match[1] : null;
+// ── Drift: the shared client's constants are contract values ─────────────
+
+check("bus name", core.EVENTS_BUS_NAME, contractJson.well_known_name);
+check("object path", core.EVENTS_OBJECT_PATH, contractJson.object_path);
+check("interface", core.EVENTS_INTERFACE, contractJson.interface);
+check("DomainEvent is a contract signal", contractJson.signals[core.DOMAIN_EVENT_SIGNAL] !== undefined, true);
+check("JobsCleared is a contract signal", contractJson.signals[core.JOBS_CLEARED_SIGNAL] !== undefined, true);
+check("Control is a contract method", contractJson.methods[core.CONTROL_METHOD] !== undefined, true);
+check("GetTopicState is a contract method", contractJson.methods[core.HYDRATION_METHOD] !== undefined, true);
+check(
+  "GetTopicState returns reserved _epoch/_seq",
+  contractJson.methods.GetTopicState.out,
+  ["state:a{sv}"],
+);
+check("Emit is a contract method", contractJson.methods[saved.EMIT_METHOD] !== undefined, true);
+check("xml declares the hub interface", contractXml.includes(core.EVENTS_INTERFACE), true);
+check(
+  "xml declares Emit",
+  new RegExp(`<method\\s+name="${saved.EMIT_METHOD}"`).test(contractXml),
+  true,
+);
+
+// ── Publisher: generated topic + payload (`icme.saved`) ──────────────────
+
+const icmeSaved = contractJson.topics["icme.saved"];
+check("icme.saved is a contract topic", icmeSaved !== undefined, true);
+check("icme.saved payload is {path:s}", icmeSaved.payload, { path: "s" });
+check("publisher topic is the generated topic", saved.ICME_SAVED_TOPIC, "icme.saved");
+check(
+  "publisher topic is declared by the vendored binding",
+  generatedTopics().includes(saved.ICME_SAVED_TOPIC),
+  true,
+);
+check(
+  "build emit topic",
+  saved.buildIcmeSavedEmit("/x/icons.yaml").topic,
+  "icme.saved",
+);
+check(
+  "build emit payload",
+  saved.buildIcmeSavedEmit("/x/icons.yaml").payload,
+  { path: "/x/icons.yaml" },
+);
+
+// A mocked bus: a successful save publishes exactly one correct event; an
+// empty path publishes nothing (the original no-op rule is preserved).
+{
+  const calls = [];
+  const bus = { emit(topic, payload) { calls.push([topic, payload]); } };
+  saved.publishIcmeSavedVia(bus, "/home/u/.config/dotfiles/icon-mappings.yaml");
+  check("one emit on save", calls.length, 1);
+  check("emit topic", calls[0][0], "icme.saved");
+  check("emit payload", calls[0][1], {
+    path: "/home/u/.config/dotfiles/icon-mappings.yaml",
+  });
+}
+{
+  const calls = [];
+  saved.publishIcmeSavedVia({ emit(topic, payload) { calls.push([topic, payload]); } }, "");
+  check("empty path publishes nothing", calls.length, 0);
 }
 
-function xmlTopLevelNames(xml, tag) {
-  const names = [];
-  const re = new RegExp(`<${tag}\\s+name="([^"]+)"`, "g");
-  let match;
-  while ((match = re.exec(xml)) !== null) names.push(match[1]);
-  return names;
+// ── Vendored binding: byte-identical body to `contracts/generated` ───────
+//
+// The vendored copy is a second source of truth the moment a hand edit lands.
+// The first three lines are the fixed vendored header; everything after them
+// must be the generated artifact exactly (AD-6).
+
+{
+  const vendored = readFileSync(join(icmeDir, "lib", "generated", "contract.ts"), "utf-8");
+  const generated = readFileSync(join(contractsRepo, "generated", "contract.ts"), "utf-8");
+  const body = vendored.split("\n").slice(3).join("\n");
+  check("vendored binding body matches contracts/generated", body, generated);
+  check(
+    "vendored binding names its pin",
+    /GENERATED from the `contracts` repo \(generated\/contract\.ts\) at pin [0-9a-f]{7,}/.test(
+      vendored.split("\n")[1],
+    ),
+    true,
+  );
 }
 
-const xmlMethods = xmlTopLevelNames(contractXml, "method");
-const xmlSignals = xmlTopLevelNames(contractXml, "signal");
+// ── The topic the editor consumes (`wallpaper.state`) ────────────────────
 
-// ── Drift: every baked constant is a machine-definition value ────────────
+const wallpaper = contractJson.topics["wallpaper.state"];
+check("wallpaper.state is a contract topic", wallpaper !== undefined, true);
+check(
+  "wallpaper.state payload keys",
+  Object.keys(wallpaper.payload).sort(),
+  ["reload_failures", "stage", "state", "trigger", "wallpaper_hash"],
+);
+check("wallpaper.state enum.state", wallpaper.enum.state, ["applying", "visible", "done", "error"]);
 
-check("xml interface matches json", xmlInterfaceName(contractXml), contractJson.interface);
-
-for (const [label, mod] of [
-  ["bar", bar],
-  ["icme", icme],
-]) {
-  check(`${label} bus name`, mod.EVENTS_BUS_NAME, contractJson.well_known_name);
-  check(`${label} object path`, mod.EVENTS_OBJECT_PATH, contractJson.object_path);
-  check(`${label} interface`, mod.EVENTS_INTERFACE, contractJson.interface);
-}
-
-check("bar DomainEvent signal is a contract signal", contractJson.signals[bar.DOMAIN_EVENT_SIGNAL] !== undefined, true);
-check("bar JobsCleared signal is a contract signal", contractJson.signals[bar.JOBS_CLEARED_SIGNAL] !== undefined, true);
-check("bar DomainEvent in xml signals", xmlSignals.includes(bar.DOMAIN_EVENT_SIGNAL), true);
-check("bar JobsCleared in xml signals", xmlSignals.includes(bar.JOBS_CLEARED_SIGNAL), true);
-check("bar DomainEvent carries topic/seq/epoch", contractJson.signals.DomainEvent.slice(0, 4), ["topic:s", "producer:s", "seq:u", "epoch:u"]);
-check("bar Control is a contract method", contractJson.methods[bar.CONTROL_METHOD] !== undefined, true);
-check("bar GetTopicState is a contract method", contractJson.methods[bar.HYDRATION_METHOD] !== undefined, true);
-check("bar Control in xml methods", xmlMethods.includes(bar.CONTROL_METHOD), true);
-check("bar GetTopicState in xml methods", xmlMethods.includes(bar.HYDRATION_METHOD), true);
-check("bar hydration returns reserved _epoch/_seq", contractJson.methods.GetTopicState.out, ["state:a{sv}"]);
-
-check("bar capture.state is a contract topic", contractJson.topics[bar.CAPTURE_STATE_TOPIC] !== undefined, true);
-check("bar speedtest.state is a contract topic", contractJson.topics[bar.SPEEDTEST_STATE_TOPIC] !== undefined, true);
-// The old terminal-only speed-test topic is SUPERSEDED, not extended. Its name
-// is assembled rather than written literally so this guard does not itself
-// reintroduce the dead string into a tree-wide `git grep` scan.
-const SUPERSEDED_SPEEDTEST_TOPIC = ["speedtest", "finished"].join(".");
-check(`${SUPERSEDED_SPEEDTEST_TOPIC} is superseded, not extended`, contractJson.topics[SUPERSEDED_SPEEDTEST_TOPIC], undefined);
-// The contract ADDED `ssid` and `server_name` (optional) when the speed-test
-// card began naming what it measured; this assertion pins the full payload, so
-// it must track the contract. They are in the contract's `optional` list, i.e.
-// the change is additive and only `done` requires them — the assertion below on
-// `enum.state` still pins the required vocabulary.
-check("speedtest.state payload keys", Object.keys(contractJson.topics["speedtest.state"].payload).sort(), ["down_mbps", "latency_ms", "reason", "server_name", "ssid", "state", "trigger", "up_mbps"]);
-check("speedtest.state enum.state", contractJson.topics["speedtest.state"].enum.state, ["starting", "done", "error"]);
-check("speedtest.state enum.trigger", contractJson.topics["speedtest.state"].enum.trigger, ["scheduled", "manual", "connect"]);
-check("capture.state payload keys", Object.keys(contractJson.topics["capture.state"].payload).sort(), ["elapsed_seconds", "state"]);
-check("capture.state enum", contractJson.topics["capture.state"].enum.state, ["idle", "recording", "paused"]);
-
-check("icme Emit is a contract method", contractJson.methods[icme.EMIT_METHOD] !== undefined, true);
-check("icme Emit in xml methods", xmlMethods.includes(icme.EMIT_METHOD), true);
-check("icme.saved is a contract topic", contractJson.topics[icme.ICME_SAVED_TOPIC] !== undefined, true);
-check("icme.saved payload is {path:s}", contractJson.topics["icme.saved"].payload, { path: "s" });
-
-// ── Drift: ICME's domain-event CONSUMER constants ────────────────────────
-// The editor consumes `wallpaper.state` for the live palette refresh, so its
-// copied consumer core must agree with the same machine definition.
-check("icme consumer bus name", icmeConsumer.EVENTS_BUS_NAME, contractJson.well_known_name);
-check("icme consumer object path", icmeConsumer.EVENTS_OBJECT_PATH, contractJson.object_path);
-check("icme consumer interface", icmeConsumer.EVENTS_INTERFACE, contractJson.interface);
-check("icme consumer DomainEvent signal is a contract signal", contractJson.signals[icmeConsumer.DOMAIN_EVENT_SIGNAL] !== undefined, true);
-check("icme consumer DomainEvent in xml signals", xmlSignals.includes(icmeConsumer.DOMAIN_EVENT_SIGNAL), true);
-check("icme consumer JobsCleared signal is a contract signal", contractJson.signals[icmeConsumer.JOBS_CLEARED_SIGNAL] !== undefined, true);
-check("icme consumer Control is a contract method", contractJson.methods[icmeConsumer.CONTROL_METHOD] !== undefined, true);
-check("icme consumer GetTopicState is a contract method", contractJson.methods[icmeConsumer.HYDRATION_METHOD] !== undefined, true);
-check("icme consumer GetTopicState in xml methods", xmlMethods.includes(icmeConsumer.HYDRATION_METHOD), true);
-check("icme consumer wallpaper.state is a contract topic", contractJson.topics[icmeConsumer.WALLPAPER_STATE_TOPIC] !== undefined, true);
-check("wallpaper.state payload keys", Object.keys(contractJson.topics["wallpaper.state"].payload).sort(), ["state", "trigger", "wallpaper_hash"]);
-check("wallpaper.state optional", contractJson.topics["wallpaper.state"].optional, ["trigger"]);
-check("wallpaper.state enum", contractJson.topics["wallpaper.state"].enum.state, ["applying", "visible", "done", "error"]);
-check("wallpaper.state trigger enum", contractJson.topics["wallpaper.state"].enum.trigger, ["set", "regenerate", "reconcile", "reactive"]);
-
-// ── Bar hydration core (scripted fake transport, no bus) ─────────────────
+// ── Subscribe-before-read hydration (fake transport, no bus) ─────────────
 
 function fakeTransport(states) {
   const calls = [];
@@ -145,139 +184,130 @@ function fakeTransport(states) {
       calls.push(`control:${jobId}:${action}`);
     },
   };
-  return {
-    transport,
-    calls,
-    signals,
-    setState(next) {
-      state = { ...next };
-    },
-  };
+  return { transport, calls, signals, setState: (next) => { state = { ...next }; } };
 }
 
-// (1) subscribe installs signal match rules BEFORE reading topic state.
-{
-  const fake = fakeTransport({});
-  const bus = new bar.DomainEventBusCore(fake.transport);
-  bus.subscribe("capture.state", () => {});
-  check("subscribe-before-read order", fake.calls, ["startSignals", "getTopicState:capture.state"]);
-}
-
-// (2) hydration delivers the current payload immediately (bar starts mid-recording).
+// Hydration on subscribe delivers the last wallpaper payload immediately, so an
+// editor opened mid-apply renders the current state without waiting.
 {
   const fake = fakeTransport({
-    "capture.state": { _epoch: 4, _seq: 7, state: "recording", elapsed_seconds: 12, job_id: "job-1" },
+    "wallpaper.state": { state: "done", wallpaper_hash: "abc", _epoch: 2, _seq: 1 },
   });
-  const bus = new bar.DomainEventBusCore(fake.transport);
+  const bus = new core.DomainEventBusCore(fake.transport);
   const seen = [];
-  bus.subscribe("capture.state", (topic, payload) => seen.push([topic, payload]));
-  check("hydration delivers payload", seen.length, 1);
-  check("hydration payload topic", seen[0][0], "capture.state");
-  check("hydration payload state", seen[0][1].state, "recording");
-  check("hydration payload elapsed", seen[0][1].elapsed_seconds, 12);
-  check("hydrated pair", bus.hydratedPair("capture.state"), [4, 7]);
-
-  // (3) a signal at or below the hydrated pair is dropped; above is delivered.
-  const dispatch = (topic, seq, epoch, payload) => fake.signals.onDomainEvent([topic, "producer", seq, epoch, payload]);
-  dispatch("capture.state", 7, 4, { state: "paused", elapsed_seconds: 99 });
-  check("stale equal pair dropped", seen.length, 1);
-  dispatch("capture.state", 6, 4, { state: "paused", elapsed_seconds: 99 });
-  check("stale lower seq dropped", seen.length, 1);
-  dispatch("capture.state", 8, 4, { state: "paused", elapsed_seconds: 13 });
-  check("newer pair delivered", seen.length, 2);
-  check("newer payload state", seen[1][1].state, "paused");
-  check("baseline advanced", bus.hydratedPair("capture.state"), [4, 8]);
-
-  // (4) an epoch bump wins even with a lower seq (seq resets per epoch).
-  dispatch("capture.state", 1, 5, { state: "recording", elapsed_seconds: 1 });
-  check("epoch bump wins over lower seq", seen.length, 3);
-  check("epoch bump baseline", bus.hydratedPair("capture.state"), [5, 1]);
-
-  // (5) JobsCleared resets the UI then re-hydrates (stale epoch ignored).
-  let restarts = 0;
-  bus.onRestart(() => {
-    restarts += 1;
-  });
-  fake.setState({ "capture.state": { _epoch: 6, _seq: 2, state: "recording", elapsed_seconds: 3 } });
-  fake.signals.onJobsCleared([5]); // not newer than lastEpoch 5 -> ignored
-  check("duplicate JobsCleared ignored", restarts, 0);
-  fake.signals.onJobsCleared([6]);
-  check("JobsCleared notifies restart", restarts, 1);
-  check("JobsCleared re-hydrates current state", seen[seen.length - 1][1].state, "recording");
-  check("JobsCleared baseline", bus.hydratedPair("capture.state"), [6, 2]);
-}
-
-// (6) an empty/absent GetTopicState delivers nothing and baselines (0,0).
-{
-  const fake = fakeTransport({});
-  const bus = new bar.DomainEventBusCore(fake.transport);
-  const seen = [];
-  bus.subscribe("capture.state", (topic, payload) => seen.push([topic, payload]));
-  check("absent state delivers nothing", seen.length, 0);
-  check("absent state baseline", bus.hydratedPair("capture.state"), [0, 0]);
-}
-
-// (7) the NameOwnerChanged fallback resets and re-hydrates like JobsCleared.
-{
-  const fake = fakeTransport({
-    "capture.state": { _epoch: 1, _seq: 1, state: "recording", elapsed_seconds: 5 },
-  });
-  const bus = new bar.DomainEventBusCore(fake.transport);
-  const seen = [];
-  let restarts = 0;
-  bus.subscribe("capture.state", (topic, payload) => seen.push(payload.state));
-  bus.onRestart(() => {
-    restarts += 1;
-  });
-  fake.setState({ "capture.state": { _epoch: 2, _seq: 0, state: "idle", elapsed_seconds: 0 } });
-  fake.signals.onHubRestart();
-  check("NameOwnerChanged notifies restart", restarts, 1);
-  check("NameOwnerChanged re-hydrates", seen[seen.length - 1], "idle");
-}
-
-// (8) parseTopicState splits reserved members and coerces wire values.
-check(
-  "parseTopicState splits reserved",
-  bar.parseTopicState({ _epoch: 9, _seq: 3, state: "idle", elapsed_seconds: 0 }),
-  { epoch: 9, seq: 3, payload: { state: "idle", elapsed_seconds: 0 } },
-);
-check("asUint floors positive", bar.asUint(3.7), 3);
-check("asUint rejects negatives", bar.asUint(-1), 0);
-check("isNewer epoch beats seq", bar.isNewer([4, 9], 5, 1), true);
-check("isNewer equal is stale", bar.isNewer([4, 9], 4, 9), false);
-
-// ── ICME consumer core (same copied state machine, wallpaper.state) ──────
-{
-  const fake = fakeTransport({});
-  const bus = new icmeConsumer.DomainEventBusCore(fake.transport);
-  bus.subscribe("wallpaper.state", () => {});
+  bus.subscribe("wallpaper.state", (_t, payload) => seen.push(payload));
   check(
-    "icme subscribe-before-read order",
+    "subscribe installs signals before hydrating",
     fake.calls,
     ["startSignals", "getTopicState:wallpaper.state"],
   );
+  check("hydrated wallpaper payload", seen, [{ state: "done", wallpaper_hash: "abc" }]);
+  check("hydrated pair", bus.hydratedPair("wallpaper.state"), [2, 1]);
+
+  // A stale (epoch, seq) signal is dropped; a newer one is delivered once.
+  fake.signals.onDomainEvent([
+    "wallpaper.state", "producer", 1, 2, { state: "error", wallpaper_hash: "" },
+  ]);
+  check("stale wallpaper.state dropped", seen.length, 1);
+  fake.signals.onDomainEvent([
+    "wallpaper.state", "producer", 2, 2, { state: "done", wallpaper_hash: "def" },
+  ]);
+  check("newer wallpaper.state delivered", seen.length, 2);
+  check("baseline advanced", bus.hydratedPair("wallpaper.state"), [2, 2]);
 }
+
+// An absent state is a no-op and baselines (0, 0): a missing hub cannot stall
+// the editor at start-up.
 {
-  const fake = fakeTransport({
-    "wallpaper.state": { _epoch: 2, _seq: 1, state: "done", wallpaper_hash: "abc" },
-  });
-  const bus = new icmeConsumer.DomainEventBusCore(fake.transport);
+  const fake = fakeTransport({});
+  const bus = new core.DomainEventBusCore(fake.transport);
   const seen = [];
-  bus.subscribe("wallpaper.state", (topic, payload) => seen.push([topic, payload]));
-  check("icme hydration delivers wallpaper.state", seen.length, 1);
-  check("icme hydrated pair", bus.hydratedPair("wallpaper.state"), [2, 1]);
-  const dispatch = (topic, seq, epoch, payload) =>
-    fake.signals.onDomainEvent([topic, "producer", seq, epoch, payload]);
-  dispatch("wallpaper.state", 1, 2, { state: "error", wallpaper_hash: "" });
-  check("icme stale wallpaper.state dropped", seen.length, 1);
-  dispatch("wallpaper.state", 2, 2, { state: "done", wallpaper_hash: "def" });
-  check("icme newer wallpaper.state delivered", seen.length, 2);
-  check("icme newer state payload", seen[1][1].state, "done");
+  bus.subscribe("wallpaper.state", (_t, payload) => seen.push(payload));
+  check("absent state delivers nothing", seen.length, 0);
+  check("absent state baseline", bus.hydratedPair("wallpaper.state"), [0, 0]);
+}
+
+// ── Structural: the app consumes the platform + generated binding ────────
+//
+// REQ-006 removes `lib/event-bus*.ts`, `lib/event-contract.ts` and
+// `lib/theme.ts`. Source reads, labelled structural (running a second editor
+// would open a window on the live compositor).
+
+const windowSource = readFileSync(join(icmeDir, "ui", "EditorWindow.tsx"), "utf-8");
+const appSource = readFileSync(join(icmeDir, "app.tsx"), "utf-8");
+const publisherSource = readFileSync(join(icmeDir, "lib", "icme-saved.ts"), "utf-8");
+const publisherBusSource = readFileSync(join(icmeDir, "lib", "icme-saved-gio.ts"), "utf-8");
+
+check(
+  "window imports the platform event client",
+  /from\s+"ags-platform\/adapters\/event-bus"/.test(windowSource),
+  true,
+);
+check(
+  "window subscribes wallpaper.state",
+  windowSource.includes("domainEvents.subscribe(WALLPAPER_STATE_TOPIC"),
+  true,
+);
+check(
+  "window's topic constant is the contract topic",
+  windowSource.includes('const WALLPAPER_STATE_TOPIC = "wallpaper.state"'),
+  true,
+);
+check(
+  "window imports the platform Theme port",
+  /from\s+"ags-platform\/adapters\/theme"/.test(windowSource),
+  true,
+);
+check(
+  "app imports the platform Theme port",
+  /from\s+"ags-platform\/adapters\/theme"/.test(appSource),
+  true,
+);
+check(
+  "publisher uses the vendored generated binding",
+  /from\s+"\.\/generated\/contract(?:\.ts)?"/.test(publisherSource),
+  true,
+);
+check(
+  "publisher uses the shared client's Emit method",
+  /EMIT_METHOD[\s\S]*from\s+"ags-platform\/ports\/event-client"/.test(publisherSource),
+  true,
+);
+check(
+  "Gio transport uses the shared client's identity",
+  /EVENTS_BUS_NAME[\s\S]*from\s+"ags-platform\/ports\/event-client"/.test(publisherBusSource),
+  true,
+);
+check(
+  "no app-local event-bus import",
+  /from\s+"\.\.?\/lib\/event-bus/.test(windowSource) || /from\s+"\.\.?\/lib\/event-bus/.test(appSource),
+  false,
+);
+check(
+  "no app-local theme import",
+  /from\s+"\.\.?\/lib\/theme"/.test(windowSource) || /from\s+"\.\.?\/lib\/theme"/.test(appSource),
+  false,
+);
+for (const gone of [
+  "event-bus.ts",
+  "event-bus-core.ts",
+  "event-contract.ts",
+  "theme.ts",
+]) {
+  check(`lib/${gone} is gone`, existsSync(join(icmeDir, "lib", gone)), false);
+}
+
+// The generated binding is the topic source; importing it must expose the
+// icme.saved entry the publisher names.
+function generatedTopics() {
+  const source = readFileSync(join(icmeDir, "lib", "generated", "contract.ts"), "utf-8");
+  const match = source.match(/export const EVENTS_TOPICS = \{([\s\S]*?)\} as const;/);
+  if (match === null) return [];
+  return [...match[1].matchAll(/"([^"]+)":/g)].map((m) => m[1]);
 }
 
 if (failures > 0) {
-  console.error(`${failures} assertion(s) failed`);
-  process.exitCode = 1;
-} else {
-  console.log("event-contract drift + bar hydration agree");
+  console.error(`\n${failures} check(s) failed`);
+  process.exit(1);
 }
+console.log("\nall checks passed");

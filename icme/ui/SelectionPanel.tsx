@@ -217,8 +217,9 @@ export function SelectionPanel(props: SelectionPanelProps) {
   newNameEntry.connect("activate", () => {
     const name = newNameEntry.get_text().trim().toUpperCase();
     if (!props.selection() || !isValidPlaceholderName(name)) return;
-    if (choice()?.kind === "existing") return;
-    const token = choice()?.kind === "new" ? choice()?.token : undefined;
+    const active = choice();
+    if (active?.kind === "existing") return;
+    const token = active?.kind === "new" ? active.token : undefined;
     setChoice({ kind: "new", name, token });
     setNewName(name);
     assign();
@@ -226,8 +227,9 @@ export function SelectionPanel(props: SelectionPanelProps) {
 
   newNameEntry.connect("changed", () => {
     const text = newNameEntry.get_text();
-    if (choice()?.kind === "new") {
-      const token = choice()?.token;
+    const active = choice();
+    if (active?.kind === "new") {
+      const token = active.token;
       setChoice(text.trim() === "" ? null : { kind: "new", name: text.trim().toUpperCase(), token });
     } else {
       setChoice(null);
@@ -316,7 +318,8 @@ export function SelectionPanel(props: SelectionPanelProps) {
       const hex = token ? hexOfToken(token) : null;
       const isCur = sel?.placeholder === name;
       const isNew = props.newPlaceholders().has(name);
-      const picked = choice()?.kind === "existing" && choice()?.ph === name;
+      const chipChoice = choice();
+      const picked = chipChoice?.kind === "existing" && chipChoice.ph === name;
 
       const chip = new Gtk.Box({ css_classes: ["chip"] });
       chip.set_size_request(20, 20);
@@ -499,7 +502,10 @@ export function SelectionPanel(props: SelectionPanelProps) {
       } else {
         mapsTo.value.set_label("—");
       }
-      const usage = usageCount(active.bodies, selection.placeholder);
+      const usage =
+        selection.placeholder === null
+          ? { shapes: 0, variants: 0 }
+          : usageCount(active.bodies, selection.placeholder);
       usedBy.value.set_label(`${usage.shapes} shapes across ${usage.variants} variants`);
     }
   });

@@ -1,4 +1,5 @@
 import { Gdk, Gtk } from "ags/gtk4";
+import GdkPixbuf from "gi://GdkPixbuf?version=2.0";
 import Rsvg from "gi://Rsvg?version=2.0";
 import Pango from "gi://Pango?version=1.0";
 import { createEffect, createState, type Accessor } from "ags";

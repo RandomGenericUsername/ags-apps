@@ -15,7 +15,13 @@ export type TemplateMode = "templated" | "bare";
 export interface TemplateShapeInfo {
   id: number;
   tag: string;
-  paintAttr: "fill" | "stroke";
+  /**
+   * The painted attribute. `itr`'s JSON uses the snake-case wire name
+   * (`paint_attr`); the pure helpers keep the camel-case in-app name. Both are
+   * accepted so a wire shape and an in-app shape normalize identically.
+   */
+  paintAttr?: "fill" | "stroke";
+  paint_attr?: "fill" | "stroke";
   placeholder: string | null;
   literal: string | null;
 }
@@ -62,7 +68,7 @@ export function workingFrom(shape: TemplateShapeInfo): WorkingShape {
   return {
     id: shape.id,
     tag: shape.tag,
-    attr: shape.paintAttr,
+    attr: shape.paintAttr ?? shape.paint_attr ?? "fill",
     ph: shape.placeholder,
     literal: shape.literal,
   };

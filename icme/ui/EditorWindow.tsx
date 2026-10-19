@@ -2,7 +2,9 @@ import { Astal, Gdk, Gtk } from "ags/gtk4";
 import app from "ags/gtk4/app";
 import GLib from "gi://GLib?version=2.0";
 import { createEffect, createState } from "ags";
-import { refreshPaletteCss } from "../lib/theme";
+// Theming through the platform Theme port (spine AD-13): the app-local
+// `lib/theme.ts` copy is gone.
+import { theme } from "ags-platform/adapters/theme";
 import {
   manifestRegister,
   mappingSet,
@@ -18,12 +20,19 @@ import {
   schemeFingerprint,
   type EditorInputs,
 } from "../lib/inputs";
+// The ONE shared event client (spine AD-5): the app-local `lib/event-bus*.ts`
+// copies are gone. `wallpaper.state` keeps the editor's chrome in sync without
+// a restart; `icme.saved` is published through the generated binding.
 import {
   domainEvents,
-  publishIcmeSaved,
-  WALLPAPER_STATE_TOPIC,
   type DomainPayload,
-} from "../lib/event-bus";
+} from "ags-platform/adapters/event-bus";
+import { publishIcmeSaved } from "../lib/icme-saved-gio";
+
+//: The topic this editor consumes. The platform client is generic over topics
+//: (only the bar-owned indicators get constants), so the one topic is named
+//: here; `tests/event-contract-drift.mjs` pins it to the canonical contract.
+const WALLPAPER_STATE_TOPIC = "wallpaper.state" as const;
 import type {
   PendingEdit,
   Scope,
@@ -171,7 +180,7 @@ export function EditorWindow(gdkmonitor: Gdk.Monitor) {
   // fingerprint moved — without restarting, so pending edits survive.
   function refreshChrome(): void {
     try {
-      refreshPaletteCss();
+      theme.apply();
     } catch (error) {
       console.error(`icme: style refresh failed: ${error}`);
     }
@@ -207,7 +216,9 @@ export function EditorWindow(gdkmonitor: Gdk.Monitor) {
 
   function pick(token: string): void {
     const sel = selection();
-    if (!sel) return;
+    // A bare shape has no placeholder to retarget; picks are inert until one
+    // is assigned in the Shape Placeholder pane.
+    if (!sel || sel.placeholder === null) return;
     if (scope() === "vocabulary") {
       const next = new Map(vocabPending());
       next.set(sel.placeholder, { placeholder: sel.placeholder, token });
@@ -584,7 +595,7 @@ export function EditorWindow(gdkmonitor: Gdk.Monitor) {
       class="icme-window"
       title="Icon Color Mapping Editor"
       gdkmonitor={gdkmonitor}
-      anchor={0}
+      anchor={Astal.WindowAnchor.NONE}
       layer={Astal.Layer.OVERLAY}
       keymode={Astal.Keymode.ON_DEMAND}
       default_width={1280}

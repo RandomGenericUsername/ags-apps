@@ -12,6 +12,11 @@ export interface ShapeInfo {
   placeholder: string | null;
   /** Painted attribute carrying the placeholder: "fill" or "stroke". */
   paintAttr: "fill" | "stroke";
+  /**
+   * The literal paint value when the shape carries no placeholder (a bare
+   * shape; `"#rrggbb"` or `"none"`), else null. The bare-shape pane shows it.
+   */
+  literal: string | null;
   /** Source text of the shape element (for highlight overlays). */
   element: string;
   /** Tag name (path, rect, circle, …). */
@@ -58,11 +63,13 @@ export function extractShapes(svgBody: string): ShapeInfo[] {
     // Fill wins unless explicitly none (SVG default fill is black, so a
     // missing fill attribute still paints).
     const useStroke = fill === "none";
-    const placeholder = useStroke ? placeholderOf(stroke) : placeholderOf(fill);
+    const paintValue = useStroke ? stroke : fill;
+    const placeholder = placeholderOf(paintValue);
     shapes.push({
       id,
       placeholder,
       paintAttr: useStroke ? "stroke" : "fill",
+      literal: placeholder === null ? paintValue : null,
       element,
       tag: match[1],
     });
