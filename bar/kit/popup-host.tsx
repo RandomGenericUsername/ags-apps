@@ -1,12 +1,7 @@
 import { Astal, Gtk, Gdk } from "ags/gtk4"
-import { With, createComputed, createEffect, createState } from "ags"
+import { With, createComputed, createEffect } from "ags"
 import type { Accessor } from "ags"
-import { overlayLifecycle } from "ags-platform/adapters/overlay-lifecycle"
-import {
-  createSurfaceMount,
-  surfaceContentSignature,
-  type SurfaceSpec,
-} from "./surface"
+import { createSurfaceMount, type SurfaceSpec } from "./surface"
 
 /**
  * The app-facing surface declaration: `kit/surface.ts` is pure and leaves the
@@ -135,47 +130,6 @@ export function PopupHost({
     </box>
   ))
 
-  // AD-24 (surface before content; spine, `docs/GUIDE-ags-overlay-performance.md`).
-  //
-  // The window is presented by its OWN `visible` binding, in the same flush that
-  // runs this effect; the heavy body build is deferred to the host idle queue so
-  // it never blocks the first frame. `present()` is therefore a deliberate
-  // no-op: calling the window's `present()` would grab focus, and the bar's
-  // popups run keyboard-mode NONE precisely so they do NOT steal focus (that is
-  // what makes same-spot collapse reliable).
-  //
-  // AD-10 tears the body down on hide, so the signature carries the mount
-  // generation (see `surfaceContentSignature`): every open is a fresh build and
-  // the primitive's skip branch stays unreachable. What this DOES buy is the
-  // ordering — the surface is on screen before the ~15 ms settings build (and
-  // the smaller Wi-Fi/Bluetooth builds) runs, and a close that races the idle
-  // callback cancels the build instead of building a dead body.
-  const [bodyMounted, setBodyMounted] = createState(false)
-  let mountGeneration = 0
-  const lifecycle = overlayLifecycle({
-    present: () => {
-      /* structural: the window's own `visible` binding maps it */
-    },
-    hydrate: () => {
-      /* nothing cheap to sync ahead of the build */
-    },
-    build: () => setBodyMounted(true),
-    key: () => surfaceContentSignature(spec.id, mountGeneration),
-  })
-
-  createEffect(() => {
-    if (visible()) {
-      lifecycle.open()
-      return
-    }
-    // Hide: drop the body (AD-10) and move to the next mount generation so the
-    // next open rebuilds rather than skipping against a body that no longer
-    // exists.
-    setBodyMounted(false)
-    mountGeneration += 1
-    lifecycle.close()
-  })
-
   const keyboard = spec.keyboard ?? (() => false)
 
   return (
@@ -215,7 +169,7 @@ export function PopupHost({
         self.add_controller(key)
       }}
     >
-      <With value={bodyMounted}>{(v) => mount.render(v)}</With>
+      <With value={visible}>{(v) => mount.render(v)}</With>
     </window>
   )
 }

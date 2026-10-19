@@ -16,8 +16,6 @@
  * `JSX.Element`.
  */
 
-import { contentSignature } from "ags-platform/ports/overlay-lifecycle"
-
 /**
  * The reactive read a body or a spec needs. gnim's `Accessor` is a `Function`
  * subclass and is assignable to this shape, so the real runtime satisfies it
@@ -115,28 +113,4 @@ export function createSurfaceMount<E>(
       return body
     },
   }
-}
-
-/**
- * The bar's surface content signature (spine AD-24).
- *
- * The overlay lifecycle primitive skips its deferred build when `key()` is
- * unchanged since the last build. That skip is only meaningful when the built
- * content SURVIVES a hide: an unchanged reopen then reuses it. The bar's AD-10
- * mount policy is the opposite — the body is torn down on hide — so there is
- * never reusable content, and a bare `contentSignature([id])` would make the
- * primitive skip the build and show an EMPTY surface.
- *
- * Encoding the mount generation makes that explicit: each open is a new
- * generation, so the signature differs and the primitive rebuilds. The skip
- * branch stays structurally unreachable for a bar surface (a real warm path
- * would require keeping the body across a hide, which AD-10 forbids). A surface
- * that ever keeps its body would instead derive its key from the content and
- * drop the generation.
- */
-export function surfaceContentSignature(
-  id: string,
-  mountGeneration: number,
-): string {
-  return contentSignature([id, String(mountGeneration)])
 }
