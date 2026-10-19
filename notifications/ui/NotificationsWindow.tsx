@@ -100,6 +100,16 @@ function hideWindow(): void {
  * mapped and the compositor keeps re-presenting its LAST PAINTED BUFFER, so a
  * card removed from the box would otherwise stay on screen forever (verified
  * live: removeCard ran, the widget was gone, the pixels were not).
+ *
+ * AD-24 (surface before content, CONDITIONAL) is satisfied by this ordering
+ * WITHOUT the overlay-lifecycle primitive. Every card path calls `showWindow()`
+ * BEFORE it constructs the card (see `addCard` / `createWallpaperCard` /
+ * `createSpeedtestCard`), and the surface is light: measured on the live
+ * compositor, the steady-state open-path build is ~3-4 ms for the window (warm;
+ * the ~84 ms first construction is one-time process/GTK/JSX warm-up, not a
+ * per-open cost) and under 1 ms per card. The primitive is for surfaces whose
+ * build is tens of ms or more (hypr-pano's 426-451 ms rebuild); adding it here
+ * would be indirection for an imperceptible win, so the direct path stays.
  */
 function showWindow(): void {
   const window = app.get_window(WINDOW_NAME)
