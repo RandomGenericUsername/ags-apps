@@ -70,7 +70,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const CAPTURE_TOOL = resolve(HERE, "../..")
 const APP_CONFIG = resolve(CAPTURE_TOOL, "tsconfig.capture.json")
 const TESTS_CONFIG = resolve(CAPTURE_TOOL, "tests/tsconfig.tests.json")
-const REPO_ROOT = resolve(CAPTURE_TOOL, "../../..")
+const REPO_ROOT = resolve(CAPTURE_TOOL, "..")
 
 // The configs are JSONC (they carry a "//" rationale block and inline
 // comments). Strip comments while respecting string literals — the top-level
