@@ -1,5 +1,6 @@
 // Unit tests for lib/model.ts. Run with plain node:
-// `node tests/model.mjs` from the tool directory.
+// `make wallpaper-selector-tests` from the repo root (or
+// `node wallpaper-selector/tests/model.test.mjs`).
 import {
   buildModel,
   cachedContrastPref,

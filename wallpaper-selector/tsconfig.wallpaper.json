@@ -1,0 +1,65 @@
+{
+  "//": [
+    "Typecheck config for the wallpaper-selector tree (ags-apps/wallpaper-selector).",
+    "HAND-WRITTEN AND COMMITTED.",
+    "",
+    "WHY THIS GATE EXISTS: `ags bundle` TRANSPILES WITHOUT TYPE CHECKING, so a",
+    "type error is an app that builds and fails at runtime. Same posture as the",
+    "bar's tsconfig.bar.json, hypr-pano's tsconfig.pano.json and the",
+    "notifications / capture-tool configs.",
+    "",
+    "`ags types -u` writes its OWN `tsconfig.json` into whichever directory it",
+    "runs against and OVERWRITES it on every run, so this file deliberately",
+    "uses a non-colliding name. Do not rename it to tsconfig.json.",
+    "",
+    "`make wallpaper-selector-types` runs `ags types -d wallpaper-selector -u`,",
+    "generating this tree's OWN @girs/ + env.d.ts: the GIR modules describe THIS",
+    "machine, not the consuming tree. The Makefile gate declares that dependency",
+    "explicitly.",
+    "",
+    "The `ags`/`ags/*` paths map (identical to tsconfig.bar.json / pano) makes",
+    "`ags` resolve for EVERY file in the program, including the external",
+    "platform's adapters (which import `ags/gtk4/app`), instead of depending on",
+    "where a per-directory symlink happens to sit. `resolveJsonModule` is",
+    "required because the platform's adapters/icon-registry.ts imports its own",
+    "icons.json. `skipLibCheck` skips the generated @girs/ identifier clashes.",
+    "`lib` needs ES2022+DOM for the gnim JSX runtime."
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "ags/gtk4",
+
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "target": "ES2020",
+    "strict": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "ags": ["/usr/share/ags/js/lib/index.ts"],
+      "ags/*": ["/usr/share/ags/js/lib/*"]
+    },
+
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"],
+    "resolveJsonModule": true
+  },
+  "include": [
+    // App sources. Globs, not a file list, so new components are covered the
+    // moment they appear without editing this config.
+    "**/*.ts",
+    "**/*.tsx",
+
+    // REQUIRED: naming the GIR index pulls the whole transitive closure in.
+    // (`make wallpaper-selector-types` generates these from THIS host's
+    // GTK/Astal.)
+    "@girs/index.d.ts",
+
+    // Generated ambient declarations for `*.css` (the `style` import).
+    "env.d.ts"
+  ],
+  // `tests/` holds the node-run gates (`.mjs`), not app code; they are executed
+  // by `make wallpaper-selector-tests` / `make wallpaper-selector-drift-test`,
+  // never compiled into this program.
+  "exclude": ["node_modules", "tests"]
+}
