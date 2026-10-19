@@ -1,9 +1,13 @@
 import app from "ags/gtk4/app"
+import Gtk from "gi://Gtk?version=4.0"
 import GLib from "gi://GLib?version=2.0"
 import Gio from "gi://Gio?version=2.0"
 import Notifd from "gi://AstalNotifd?version=0.1"
 import style from "./style.css"
-import { refreshPaletteCss } from "./lib/theme"
+// Theming through the platform Theme port (spine AD-13): the adapter owns WHICH
+// artifact is applied — the stable `colors.css` pointer, repointed on every
+// palette change — so this app no longer carries its own theme.ts copy.
+import { theme } from "ags-platform/adapters/theme"
 import { NotificationsWindow } from "./ui/NotificationsWindow"
 
 //: The well-known bus name this app claims (also used by dunst).
@@ -41,14 +45,28 @@ function foreignNotificationDaemon(): boolean {
   }
 }
 
+/**
+ * Register one top-level window with the application.
+ *
+ * gnim types a JSX element — what `NotificationsWindow(monitor)` returns — as
+ * `JSX.Element`, which it declares as the base `GObject.Object`, while AGS's
+ * `app.add_window` is typed to take a `Gtk.Window`. At runtime the object a JSX
+ * root call returns IS the `Gtk.Window` the tree was rooted in (the surface
+ * cannot start otherwise), so the cast states a runtime truth the compiler
+ * cannot see. Same helper as `bar/app.tsx` and `hypr-pano/app.tsx`.
+ */
+function addWindow(element: JSX.Element): void {
+  app.add_window(element as Gtk.Window)
+}
+
 app.start({
   instanceName: "notifications",
   css: style,
   main() {
     try {
-      refreshPaletteCss()
+      theme.apply()
     } catch (error) {
-      console.error(`notifications: palette CSS refresh failed: ${error}`)
+      console.error(`notifications: palette CSS apply failed: ${error}`)
     }
 
     // A foreign daemon (dunst during the transition, or a duplicate instance)
@@ -82,7 +100,7 @@ app.start({
     const monitors = app.get_monitors()
     const primary = monitors[0]
     if (primary !== undefined) {
-      app.add_window(NotificationsWindow(primary))
+      addWindow(NotificationsWindow(primary))
     }
   },
 })

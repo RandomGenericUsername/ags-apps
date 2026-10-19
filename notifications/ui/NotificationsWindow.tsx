@@ -3,10 +3,33 @@ import Notifd from "gi://AstalNotifd?version=0.1"
 import Pango from "gi://Pango?version=1.0"
 import GLib from "gi://GLib?version=2.0"
 import app from "ags/gtk4/app"
-import { refreshPaletteCss } from "../lib/theme"
-import { subscribeWallpaperEvents, type WallpaperPayload, type WallpaperEventSource } from "../lib/wallpaper-events"
-import { subscribeSpeedTestEvents, type SpeedTestPayload, type SpeedTestEventSource } from "../lib/speedtest-events"
-import { resolveIcon } from "../lib/icon-registry"
+// The one domain-event client (spine AD-5): the app consumes the platform's
+// shared client instead of its own speedtest-events.ts / wallpaper-events.ts
+// copies. Topics are the contract names, passed as literals exactly as the bar
+// does for `capture.state`.
+import { domainEvents, type DomainPayload } from "ags-platform/adapters/event-bus"
+// The platform's registry-backed IconProvider (spine AD-4/AD-7) replaces the
+// app-local icon-registry.ts copy.
+import { registryProvider } from "ags-platform/adapters/icon"
+// Theming through the platform Theme port (spine AD-13).
+import { theme } from "ags-platform/adapters/theme"
+
+//: The wire payloads the two progress cards read. The platform client hands
+//: back a `DomainPayload` (an open `{key: unknown}` record); these aliases keep
+//: the card code's existing names.
+type WallpaperPayload = DomainPayload
+type SpeedTestPayload = DomainPayload
+
+/**
+ * The app's icon needs a FILE path; the platform `IconProvider` answers with a
+ * tagged `IconSource` — a rendered `file` or a symbolic `name` (AD-18). Only a
+ * file is usable here; anything else (no art for the group/variant, or a bare
+ * desktop's symbolic name) falls through to the caller's fallback tile.
+ */
+function resolveIconPath(group: string, variant: string): string | null {
+  const source = registryProvider.resolve(group, variant)
+  return source !== null && source.kind === "file" ? source.path : null
+}
 
 // AstalNotifd.Urgency wire values (GIR-verified against
 // /usr/share/gir-1.0/AstalNotifd-0.1.gir): LOW=0, NORMAL=1, CRITICAL=2.
@@ -314,15 +337,17 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
     hideIfEmpty()
   }
 
-  function wallpaperUpdate(payload: WallpaperPayload, source: WallpaperEventSource): void {
+  function wallpaperUpdate(payload: WallpaperPayload): void {
     if (payload["trigger"] !== "set") return
     const hash = typeof payload["wallpaper_hash"] === "string" ? payload["wallpaper_hash"] : ""
     const phase = typeof payload["state"] === "string" ? payload["state"] : ""
     const stage = typeof payload["stage"] === "string" ? payload["stage"] : ""
 
-    // Startup hydration restores only an operation that is still running.
-    // Live terminal events update a card only when it belongs to that run.
-    if (source === "startup-state" && phase !== "applying" && phase !== "visible") return
+    // The platform client hydrates subscribe-before-read, so a start-up read
+    // lands here too. A terminal phase for a run this process never saw start
+    // has no card to settle (`wallpaperCard === null` below), so it is dropped
+    // without resurrecting anything — the guard the old `startup-state` check
+    // provided is now the card's own existence.
     if (phase === "applying") {
       if (wallpaperCard !== null && wallpaperHash !== hash) {
         if (!wallpaperTerminal) return
@@ -337,8 +362,11 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
       setWallpaperStatus("Updating wallpaper", statusForStage(stage), stage, true)
     } else if (phase === "done") {
       wallpaperTerminal = true
-      try { refreshPaletteCss() } catch (error) {
-        console.error(`notifications: palette CSS refresh failed: ${error}`)
+      // The palette was repointed when the wallpaper landed; re-apply the
+      // stable pointer through the Theme port so the cards pick up the new
+      // colors (the port owns WHICH artifact, AD-13).
+      try { theme.apply() } catch (error) {
+        console.error(`notifications: palette CSS apply failed: ${error}`)
       }
       refreshWallpaperIcon()
       const failures = Array.isArray(payload["reload_failures"])
@@ -381,7 +409,7 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
     tile.set_size_request(44, 44)
     const icon = new Gtk.Image()
     icon.set_pixel_size(25)
-    const iconPath = resolveIcon("wallpaper-progress", "picture")
+    const iconPath = resolveIconPath("wallpaper-progress", "picture")
     tile.set_center_widget(icon)
     if (iconPath === null) {
       const fallback = new Gtk.Label({ label: "▧" })
@@ -419,7 +447,7 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
       const markerGlyph = new Gtk.Label({ label: "○" })
       const markerIcon = new Gtk.Image()
       markerIcon.set_pixel_size(15)
-      const checkCirclePath = resolveIcon("wallpaper-progress", "check-circle")
+      const checkCirclePath = resolveIconPath("wallpaper-progress", "check-circle")
       if (checkCirclePath !== null) markerIcon.set_from_file(checkCirclePath)
       marker.add_named(markerGlyph, "glyph")
       marker.add_named(markerIcon, "check")
@@ -530,12 +558,12 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
   }
 
   function refreshWallpaperIcon(): void {
-    const path = resolveIcon("wallpaper-progress", "picture")
+    const path = resolveIconPath("wallpaper-progress", "picture")
     if (path !== null && wallpaperIcon !== null) {
       wallpaperIcon.set_from_file(path)
       wallpaperIconTile?.set_center_widget(wallpaperIcon)
     }
-    const checkCirclePath = resolveIcon("wallpaper-progress", "check-circle")
+    const checkCirclePath = resolveIconPath("wallpaper-progress", "check-circle")
     if (checkCirclePath !== null) {
       for (const { markerIcon, marker } of wallpaperStepRows) {
         markerIcon.set_from_file(checkCirclePath)
@@ -598,12 +626,8 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
     hideIfEmpty()
   }
 
-  function speedtestUpdate(payload: SpeedTestPayload, source: SpeedTestEventSource): void {
+  function speedtestUpdate(payload: SpeedTestPayload): void {
     const state = typeof payload["state"] === "string" ? payload["state"] : ""
-    // Hydration restores only a run that is still going. A terminal payload read
-    // back at startup is a run this process never saw start, so there is no
-    // card to settle and no baseline to attribute its measurements to.
-    if (source === "startup-state" && state !== "starting") return
     if (state === "starting") {
       // A new run supersedes any card we are still holding for an older one.
       if (speedtestCard !== null) dismissSpeedtestCard()
@@ -613,7 +637,8 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
     }
     // A terminal event for a run we are not tracking is ignored, never
     // rendered as an orphan card: the notifications app may have started after
-    // the run began, or the card may already have been dismissed by the user.
+    // the run began (a start-up hydration read lands here too), or the card may
+    // already have been dismissed by the user.
     if (speedtestCard === null) return
     if (state === "done") {
       speedtestTerminal = true
@@ -724,7 +749,7 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
       const markerGlyph = new Gtk.Label({ label: "○" })
       const markerIcon = new Gtk.Image()
       markerIcon.set_pixel_size(15)
-      const checkCirclePath = resolveIcon("wallpaper-progress", "check-circle")
+      const checkCirclePath = resolveIconPath("wallpaper-progress", "check-circle")
       if (checkCirclePath !== null) markerIcon.set_from_file(checkCirclePath)
       marker.add_named(markerGlyph, "glyph")
       marker.add_named(markerIcon, "check")
@@ -778,7 +803,7 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
     if (state === "starting") {
       speedtestTerminal = false
       speedtestTitle?.set_label("Speed test running")
-      speedtestDetail?.set_label(`${triggerPhrase(terminal?.trigger)} · measuring your connection…`)
+      speedtestDetail?.set_label(`${triggerPhrase(terminal?.trigger ?? "")} · measuring your connection…`)
       speedtestFooter?.set_label("Runs in the background; the result is in the Wi-Fi panel.")
       setSpeedtestSteps(1, false)
       speedtestProgress.set_fraction(0)
@@ -1029,8 +1054,12 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
         css_classes={["notif-stack"]}
         $={(self) => {
           stack = self
-          subscribeWallpaperEvents(wallpaperUpdate)
-          subscribeSpeedTestEvents(speedtestUpdate)
+          // The one event client (AD-5): the platform's subscribe-before-read
+          // hydration state machine replaces the two bespoke readers. Topics
+          // are the contract literals (the platform exports no wallpaper
+          // constant, exactly as the bar passes `capture.state` as a literal).
+          domainEvents.subscribe("wallpaper.state", (_topic, payload) => wallpaperUpdate(payload))
+          domainEvents.subscribe("speedtest.state", (_topic, payload) => speedtestUpdate(payload))
         }}
       />
     </window>
