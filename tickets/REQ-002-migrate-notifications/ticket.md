@@ -7,8 +7,8 @@ lane: 2
 links:
   openspec: migrate-notifications
   bmad: none
-worktree: none
-branch: none
+worktree: .worktrees/notif4/
+branch: ticket/notif4-migrate
 ---
 
 # Migrate notifications
