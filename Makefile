@@ -16,7 +16,7 @@ AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
 # gitignored $(AGS_PLATFORM_FETCH_DIR) on demand. Override
 # AGS_PLATFORM_DEV=/path/to/ags-platform to test against a local checkout
 # while iterating on the platform itself.
-AGS_PLATFORM_VERSION := v0.1.0
+AGS_PLATFORM_VERSION := v0.2.0
 AGS_PLATFORM_REPO := https://github.com/RandomGenericUsername/ags-platform.git
 AGS_PLATFORM_DEV ?=
 AGS_PLATFORM_FETCH_DIR := $(CURDIR)/.dev/ags-platform/$(AGS_PLATFORM_VERSION)
