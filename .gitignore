@@ -46,6 +46,17 @@ openspec/worksets/
 /hypr-pano/@girs/
 /hypr-pano/env.d.ts
 
+# notifications typecheck artifacts: the same machine-generated set as the
+# bar's, rebuilt on demand via `make notifications-types` / `make
+# ags-platform-dev` (the committed typecheck config is
+# notifications/tsconfig.notifications.json). tests/node_modules/ holds the
+# on-demand @types/node install.
+/notifications/node_modules/
+/notifications/tsconfig.json
+/notifications/@girs/
+/notifications/env.d.ts
+/notifications/tests/node_modules/
+
 # The dev-time ags-platform checkout `make ags-platform-dev` fetches on demand
 # (pinned, shallow, anonymous). Deliberately OUTSIDE node_modules: Node refuses
 # to type-strip `.ts` under a real node_modules dir, but realpaths a symlink,

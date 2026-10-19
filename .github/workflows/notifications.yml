@@ -1,0 +1,65 @@
+name: notifications
+
+# Per-app CI for notifications (REQ-002): the app's typecheck + tests + drift +
+# architecture gate.
+#
+# Split by runner capability, mirroring bar.yml / hypr-pano.yml:
+# `notifications-tests`, `notifications-drift-test` and
+# `speedtest-no-new-architecture` need only Node + the shared platform client +
+# the canonical `contracts` checkout (and python3-stdlib for the last), so they
+# run on a stock `ubuntu-latest` runner; `notifications-typecheck` needs `ags`
+# on PATH plus the Astal/GIR libraries and generates ~49 MB of machine-specific
+# .d.ts, so it runs on a `[self-hosted, linux]` runner that HAS the desktop
+# stack.
+#
+# TRIGGER. This repository's default branch is `main`; PRs from any branch are
+# still checked via `pull_request` (unfiltered).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  notifications-tests:
+    name: notifications-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run the notifications pure-module unit tests
+        run: make notifications-tests
+
+  notifications-drift-test:
+    name: notifications-drift-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check out the canonical event contract
+        uses: actions/checkout@v4
+        with:
+          repository: RandomGenericUsername/contracts
+          path: contracts
+      - name: Run the drift gate
+        run: CONTRACTS_ROOT="$GITHUB_WORKSPACE/contracts" make notifications-drift-test
+
+  speedtest-no-new-architecture:
+    name: speedtest-no-new-architecture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the re-homed architecture gate
+        run: make speedtest-no-new-architecture
+
+  notifications-typecheck:
+    name: notifications-typecheck
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck the notifications tree
+        run: make notifications-typecheck
