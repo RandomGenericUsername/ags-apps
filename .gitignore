@@ -67,6 +67,15 @@ openspec/worksets/
 /capture-tool/env.d.ts
 /capture-tool/tests/node_modules/
 
+# wallpaper-selector typecheck artifacts: the same machine-generated set as the
+# bar's, rebuilt on demand via `make wallpaper-selector-types` /
+# `make ags-platform-dev` (the committed typecheck config is
+# wallpaper-selector/tsconfig.wallpaper.json).
+/wallpaper-selector/node_modules/
+/wallpaper-selector/tsconfig.json
+/wallpaper-selector/@girs/
+/wallpaper-selector/env.d.ts
+
 # The dev-time ags-platform checkout `make ags-platform-dev` fetches on demand
 # (pinned, shallow, anonymous). Deliberately OUTSIDE node_modules: Node refuses
 # to type-strip `.ts` under a real node_modules dir, but realpaths a symlink,

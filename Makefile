@@ -2,6 +2,8 @@
 	hypr-pano-types hypr-pano-typecheck hypr-pano-drift-test \
 	notifications-typecheck notifications-tests notifications-drift-test speedtest-no-new-architecture \
 	capture-tool-types capture-tool-typecheck capture-tool-tests capture-tool-tests-deps \
+	wallpaper-selector-types wallpaper-selector-typecheck wallpaper-selector-tests \
+	wallpaper-selector-drift-test \
 	icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity audio-mock-parity \
 	ags-symbol-check audio-core-test audio-presentation-test pipewire-adapter-test \
 	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
@@ -11,6 +13,7 @@ BAR_DIR := bar
 PANO_DIR := hypr-pano
 NOTIF_DIR := notifications
 CAPTURE_DIR := capture-tool
+WALLPAPER_DIR := wallpaper-selector
 AGS_TESTS := $(BAR_DIR)/tests
 AGS_TS_TESTS := $(AGS_TESTS)/ts
 AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
@@ -46,6 +49,11 @@ help:
 	@echo "capture-tool (REQ-003, slice 5):"
 	@echo "capture-tool-typecheck      tsc --noEmit on capture-tool/ (needs the desktop stack)"
 	@echo "capture-tool-tests          domain unit tests + platform-consumption acceptance (stock runner)"
+	@echo ""
+	@echo "wallpaper-selector (REQ-005, slice 6):"
+	@echo "wallpaper-selector-typecheck     tsc --noEmit on wallpaper-selector/ (needs the desktop stack)"
+	@echo "wallpaper-selector-tests         pure-model unit tests (stock runner)"
+	@echo "wallpaper-selector-drift-test    shared event client <-> contracts drift (stock runner)"
 	@echo ""
 	@echo "re-homed bar guards (ticket/bar7-rehome-guards):"
 	@echo "icons-json-drift        bar/icons.json == role projection of icons.yaml"
@@ -447,6 +455,84 @@ capture-tool-tests: capture-tool-tests-deps
 	@echo "    OK: 0 type errors in the capture-tool pure-module unit tests"
 
 # ---------------------------------------------------------------------------
+# wallpaper-selector (REQ-005, slice 6) -- per-app typecheck + tests + drift.
+#
+# Mirrors bar/ / hypr-pano/ / notifications/ / capture-tool/: the app-local
+# Makefile was dropped on the move. `wallpaper-selector-typecheck` needs the
+# desktop stack (machine-specific @girs/), so it runs on the self-hosted CI job;
+# `wallpaper-selector-tests` and `wallpaper-selector-drift-test` are pure (node +
+# the shared client) and run on a stock runner.
+# ---------------------------------------------------------------------------
+
+WALLPAPER_TESTS := $(WALLPAPER_DIR)/tests
+
+# wallpaper-selector-types -- generate this machine's GIR declarations in-tree,
+# the same shape as bar-types / hypr-pano-types / notifications-types. `ags types
+# -d wallpaper-selector -u` writes wallpaper-selector/@girs/,
+# wallpaper-selector/env.d.ts and a colliding wallpaper-selector/tsconfig.json
+# (the committed config is tsconfig.wallpaper.json precisely so it survives).
+wallpaper-selector-types:
+	@if [ -d "$(WALLPAPER_DIR)/@girs" ]; then \
+		echo "==> wallpaper-selector-types: @girs/ already generated, skipping (rm -rf $(WALLPAPER_DIR)/@girs to force)"; \
+	else \
+		echo "==> wallpaper-selector-types: generating GIR types (~2-4 min, needs network, requires the desktop stack)"; \
+		ags types -d "$(CURDIR)/$(WALLPAPER_DIR)" -u || exit 1; \
+	fi
+
+# wallpaper-selector-typecheck -- ZERO errors allowed in wallpaper-selector/.
+# Error buckets mirror bar-typecheck: fail on errors in THIS repo's tree;
+# tolerate and count the AGS runtime's own (/usr/share/ags/js/) and the external
+# platform unit's (AD-17).
+wallpaper-selector-typecheck: ags-platform-dev wallpaper-selector-types
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> wallpaper-selector-typecheck: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@mkdir -p "$(WALLPAPER_DIR)/node_modules"
+	@[ -e "$(WALLPAPER_DIR)/node_modules/ags" ] || ln -sfn /usr/share/ags/js "$(WALLPAPER_DIR)/node_modules/ags"
+	@[ -e "$(WALLPAPER_DIR)/node_modules/gnim" ] || ln -sfn /usr/share/ags/js/node_modules/gnim "$(WALLPAPER_DIR)/node_modules/gnim"
+	@echo "==> wallpaper-selector-typecheck: tsc --noEmit -p $(WALLPAPER_DIR)/tsconfig.wallpaper.json"
+	@log=$$(mktemp); \
+	npx tsc --noEmit -p "$(WALLPAPER_DIR)/tsconfig.wallpaper.json" > "$$log" 2>&1; \
+	ours=$$(grep 'error TS' "$$log" | grep -F "$(WALLPAPER_DIR)/" | grep -vF 'ags-platform/' || true); \
+	thirdparty=$$(grep 'error TS' "$$log" | grep -F '/usr/share/ags/js/' || true); \
+	platform=$$(grep 'error TS' "$$log" | grep -F 'ags-platform/' || true); \
+	other=$$(grep 'error TS' "$$log" | grep -vF "$(WALLPAPER_DIR)/" | grep -vF '/usr/share/ags/js/' | grep -vF 'ags-platform/' || true); \
+	echo "    tolerated third-party errors (/usr/share/ags/js): $$(printf '%s\n' "$$thirdparty" | grep -c . || true)"; \
+	echo "    tolerated ags-platform errors (external unit, AD-17): $$(printf '%s\n' "$$platform" | grep -c . || true)"; \
+	if [ -n "$$other" ]; then \
+		echo "FAIL: errors in neither the wallpaper-selector tree nor the known ags runtime:"; \
+		printf '%s\n' "$$other"; rm -f "$$log"; exit 1; \
+	fi; \
+	if [ -n "$$ours" ]; then \
+		echo "FAIL: type errors in $(WALLPAPER_DIR):"; \
+		printf '%s\n' "$$ours"; rm -f "$$log"; exit 1; \
+	fi; \
+	echo "    OK: 0 errors in $(WALLPAPER_DIR)"; \
+	rm -f "$$log"
+
+# wallpaper-selector-tests -- the selector's PURE model (grouping, filtering,
+# zero-hash spine mapping, live pinning, contrast helpers). No desktop stack and
+# no platform: model.ts imports nothing, so plain `node` runs the suite on a
+# stock runner (same shape as the bar's audio `.mjs` validation suites).
+wallpaper-selector-tests:
+	@command -v node >/dev/null || { echo "FAIL: wallpaper-selector-tests: node is not on PATH" >&2; exit 1; }
+	@echo "==> wallpaper-selector-tests: node $(WALLPAPER_TESTS)/model.test.mjs"
+	node $(WALLPAPER_TESTS)/model.test.mjs
+
+# wallpaper-selector-drift-test -- the repointed drift gate. Pins the SHARED
+# platform event client (AD-5) against the canonical contract, exercises its
+# subscribe-before-read hydration state machine for `wallpaper.state` (including
+# the optional stage/reload_failures members), and asserts the app consumes the
+# ONE platform event client + IconProvider + Theme port (no app-local copies).
+# Pure: no desktop stack, so it runs on a stock runner. The contract lives in the
+# sibling `contracts` repo (CONTRACTS_ROOT; the test also self-searches) and a
+# missing contract FAILS -- never a silent skip.
+wallpaper-selector-drift-test: ags-platform-dev
+	@command -v node >/dev/null || { echo "FAIL: wallpaper-selector-drift-test: node is not on PATH" >&2; exit 1; }
+	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(WALLPAPER_DIR)/tests/event-contract-drift.mjs
+
+# ---------------------------------------------------------------------------
 # Re-homed notifications guard (REQ-002, slice 4; ticket/notif4-migrate).
 #
 # `speedtest-no-new-architecture` was authored in dotfiles-v3 against
@@ -592,4 +678,10 @@ NOTIF_GUARDS := speedtest-no-new-architecture notifications-tests notifications-
 # app consumes no contract topic (see the capture-tool Makefile section).
 CAPTURE_GUARDS := capture-tool-tests
 
-gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS)
+# The wallpaper-selector pure gates (REQ-005): the model unit suite and the
+# repointed drift gate need only node + the shared client, so they belong on the
+# stock runner. `wallpaper-selector-typecheck` needs the desktop stack and runs
+# on the self-hosted CI job, never here.
+WALLPAPER_GUARDS := wallpaper-selector-tests wallpaper-selector-drift-test
+
+gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS)
