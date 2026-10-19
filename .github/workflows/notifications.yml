@@ -45,6 +45,13 @@ jobs:
         with:
           repository: RandomGenericUsername/contracts
           path: contracts
+          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
+      - name: Assert the canonical contract is present
+        run: |
+          if [ ! -f "$GITHUB_WORKSPACE/contracts/event-contract.json" ]; then
+            echo "FAIL: no canonical contract at $GITHUB_WORKSPACE/contracts/event-contract.json -- the contracts checkout did not happen (is CONTRACTS_READ_TOKEN set with read access to the private contracts repo?)" >&2
+            exit 1
+          fi
       - name: Run the drift gate
         run: CONTRACTS_ROOT="$GITHUB_WORKSPACE/contracts" make notifications-drift-test
 
