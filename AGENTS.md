@@ -26,3 +26,10 @@ Format: any non-trivial claim gets an `Evidence:` line and a `Verify:` line (how
 - Bounded slices (one proposal + spec + design + tasks) → OpenSpec (`/opsx-propose`, `/opsx-apply`, `/opsx-archive`). Artifact rules in `openspec/config.yaml` restate this evidence rule per artifact.
 - Never work on main: `scripts/worktree-guard.sh create <id> <slug>` scaffolds `ticket/<id>-<slug>` + worktree, aborts when dirty. Record worktree/branch in the ticket.
 - Keep changes small, verifiable, committable. Never mix planning edits with implementation in one turn.
+
+## 4. CI secrets
+
+The `contracts` repo is **private**, so the default `GITHUB_TOKEN` cannot read it. The drift jobs in `icme.yml`, `hypr-pano.yml`, `notifications.yml` and `wallpaper-selector.yml` check it out with `token: ${{ secrets.CONTRACTS_READ_TOKEN }}`.
+
+- `CONTRACTS_READ_TOKEN` must be a **fine-grained PAT with `contents: read`** on `RandomGenericUsername/contracts`.
+- Without it (absent, expired, or lacking that permission) those four jobs fail at "Check out the canonical event contract" with `Not Found`; the following "Assert the canonical contract is present" step then fails with an explicit message rather than a raw ENOENT from the drift test.
