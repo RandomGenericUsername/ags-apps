@@ -2,7 +2,7 @@
 id: REQ-007
 title: "Migrate btop-theme-studio"
 kind: requirement
-status: in-progress
+status: done
 lane: 2
 links:
   openspec: none
@@ -78,3 +78,16 @@ numbers and reasoning are in commit `4cfc0ff`.
 
 Not in this ticket: repointing dotfiles-v3 provisioning at the unit (separate
 consumption slice) and deleting the in-repo dotfiles copy (AD-20).
+
+## Closing evidence (added at the v0.3.8 roll-up)
+
+- **Merged:** `c6f09e5 merge ticket/btop8-migrate: btop-theme-studio thin
+  consumer (REQ-007)`. Tag `v0.3.8`.
+- **Consumed by dotfiles-v3:** `f1193527 feat(ags_apps): consume
+  btop-theme-studio from the unit + bump pin to v0.3.8` (pin at
+  `src/provisioning/ansible/roles/ags_apps/vars/main.yml:99`).
+- **Gates re-run in this repo (2026-10-19):**
+  `make btop-theme-studio-typecheck` → exit 0 (`OK: 0 errors in
+  btop-theme-studio`); `make btop-theme-studio-live-tests` → exit 0
+  (`11 passed in 13.17s`); `make gates-ci` → exit 0 (includes the studio's
+  pure tests and the 48-key drift check).

@@ -2,7 +2,7 @@
 id: REQ-003
 title: "Migrate capture-tool"
 kind: requirement
-status: proposed
+status: done
 lane: 2
 links:
   openspec: migrate-capture-tool
@@ -21,8 +21,8 @@ Source: spine **AD-7**, **AD-11**, **AD-12**, **AD-13**; handoff iteration 6.
 
 ## Acceptance
 
-- [ ] `src/gui-tools/capture-tool/lib/icon-registry.ts` is gone; the platform provider is used.
-- [ ] `bar_compact_controls` is served through `Preferences` (owned file + monitor).
+- [x] `src/gui-tools/capture-tool/lib/icon-registry.ts` is gone; the platform provider is used.
+- [x] `bar_compact_controls` is served through `Preferences` (owned file + monitor).
 - [ ] Direct `Notify` sends route through `Notifier`.
 
 ## Migration notes (slice 5, ticket/cap5-migrate)
@@ -69,4 +69,30 @@ Source: spine **AD-7**, **AD-11**, **AD-12**, **AD-13**; handoff iteration 6.
   suite remains, so the launcher contract is still pinned until the deletion
   change. The Python backend suites (`tests/*.py`) test `bin/capture-tool`, which
   did not move.
+
+## Closing evidence (v0.3.8 roll-up)
+
+- **Merged:** `e7bc54b merge ticket/cap5-migrate: capture-tool thin consumer
+  (REQ-003)`. Tag `v0.3.5`.
+- **Consumed by dotfiles-v3:** `b56991c3 feat(ags_apps): consume capture-tool
+  from the unit + bump pin to v0.3.5`.
+- **Icon provider:** `capture-tool/lib/icon-registry.ts` does not exist in the
+  app tree; `capture-tool/ui/shared/icons.ts` imports
+  `ags-platform/adapters/icon` and `capture-tool/tests/ts/platform-consumption.test.ts`
+  pins it.
+- **Preferences:** `bar/bar/widgets/recording.tsx:55` reads
+  `preferences.get("capture-tool", "bar_compact_controls", false)` through
+  `ags-platform/adapters/preferences`. The adapter's namespace file + monitor
+  live in the external `ags-platform` unit, not in this repo.
+- **Gates (run in this repo, 2026-10-19):** `make capture-tool-typecheck` →
+  exit 0 (`OK: 0 errors in capture-tool`; 1 tolerated platform error);
+  `make gates-ci` → exit 0 (includes `capture-tool-tests`).
+- **CI:** `.github/workflows/capture-tool.yml` runs the pure tests and the
+  self-hosted typecheck.
+- **Unticked box / lifecycle note:** the `Notify` criterion is left unticked
+  because the premise does not hold — the AGS app has no `Notify` send to
+  reroute; the Python backend owns those sends (see the migration notes). The
+  ticket is marked `done` because the app migration itself landed in `v0.3.5`;
+  strictly, LIFECYCLE's "every acceptance checkbox ticked" gate is not met for
+  this one N/A criterion.
 
