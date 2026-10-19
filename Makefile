@@ -2,6 +2,7 @@
 	hypr-pano-types hypr-pano-typecheck hypr-pano-drift-test \
 	notifications-typecheck notifications-tests notifications-drift-test speedtest-no-new-architecture \
 	capture-tool-types capture-tool-typecheck capture-tool-tests capture-tool-tests-deps \
+	capture-tool-backend-tests \
 	wallpaper-selector-types wallpaper-selector-typecheck wallpaper-selector-tests \
 	wallpaper-selector-drift-test \
 	icme-types icme-typecheck icme-tests icme-drift-test \
@@ -54,6 +55,7 @@ help:
 	@echo "capture-tool (REQ-003, slice 5):"
 	@echo "capture-tool-typecheck      tsc --noEmit on capture-tool/ (needs the desktop stack)"
 	@echo "capture-tool-tests          domain unit tests + platform-consumption acceptance (stock runner)"
+	@echo "capture-tool-backend-tests  Python backend pytest suites (needs uv; stock runner)"
 	@echo ""
 	@echo "wallpaper-selector (REQ-005, slice 6):"
 	@echo "wallpaper-selector-typecheck     tsc --noEmit on wallpaper-selector/ (needs the desktop stack)"
@@ -470,6 +472,18 @@ capture-tool-tests: capture-tool-tests-deps
 	npx tsc --noEmit -p "$(CAPTURE_TSCONFIG_TESTS)" || exit 1
 	@echo "    OK: 0 type errors in the capture-tool pure-module unit tests"
 
+# capture-tool-backend-tests -- the Python backend's pytest suites (the CLI,
+# settings and notification contracts), relocated from
+# dotfiles-v3/src/gui-tools/capture-tool/tests/ with the backend itself. The
+# script is dependency-free (stdlib only) and the suites import it by absolute
+# path, so this needs no venv, no install step and no desktop stack -- just
+# python3 + uv. Deliberately part of gates-ci: unlike the GUI typecheck it is a
+# stock-runner gate.
+capture-tool-backend-tests:
+	@command -v uv >/dev/null || { echo "FAIL: capture-tool-backend-tests: uv is not on PATH" >&2; exit 1; }
+	@echo "==> capture-tool-backend-tests: uv run --with pytest pytest $(CAPTURE_DIR)/tests/python -q"
+	@uv run --with pytest pytest $(CAPTURE_DIR)/tests/python -q
+
 # ---------------------------------------------------------------------------
 # wallpaper-selector (REQ-005, slice 6) -- per-app typecheck + tests + drift.
 #
@@ -860,12 +874,13 @@ PANO_GUARDS := hypr-pano-drift-test
 # runs on the self-hosted CI job, never here.
 NOTIF_GUARDS := speedtest-no-new-architecture notifications-tests notifications-drift-test
 
-# The capture-tool pure gate (REQ-003): the domain unit tests + the
-# platform-consumption acceptance need only node + the app's own sources, so it
-# belongs on the stock runner. `capture-tool-typecheck` needs the desktop stack
-# and runs on the self-hosted CI job, never here. There is no drift gate: the
-# app consumes no contract topic (see the capture-tool Makefile section).
-CAPTURE_GUARDS := capture-tool-tests
+# The capture-tool pure gates (REQ-003): the domain unit tests + the
+# platform-consumption acceptance need only node + the app's own sources, and
+# the relocated Python backend suites need only python3 + uv, so both belong on
+# the stock runner. `capture-tool-typecheck` needs the desktop stack and runs on
+# the self-hosted CI job, never here. There is no drift gate: the app consumes no
+# contract topic (see the capture-tool Makefile section).
+CAPTURE_GUARDS := capture-tool-tests capture-tool-backend-tests
 
 # The wallpaper-selector pure gates (REQ-005): the model unit suite and the
 # repointed drift gate need only node + the shared client, so they belong on the
