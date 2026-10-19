@@ -26,12 +26,16 @@
 //      new one must not.
 //   2. the WIRING, read from the real `ClassicWindow.tsx` — no `get_window`
 //      call survives, and the self-reference is per-CALL rather than per-module.
-//   3. the NAME CONTRACT, read across files — the window's `name`, the
-//      stylesheet's `window#...` id selector and the provisioned launcher's
-//      `WINDOW=` all still agree. A rename that misses the launcher would leave
-//      the keybind addressing a window that does not exist, which is exactly the
-//      failure `extract-capture-gui-tool/proposal.md` records from the last time
-//      this name moved.
+//   3. the NAME CONTRACT, read across files — the window's `name` and the
+//      stylesheet's `window#...` id selector still agree. The THIRD consumer,
+//      the provisioned launcher's `WINDOW=`, lives in dotfiles-v3
+//      (`src/provisioning/ansible/roles/cli_tools/templates/capture-ui.j2`) and
+//      is pinned by that repo's copy of this suite, which remains until the
+//      separate deletion change (AD-20) retires the in-place capture-tool tree.
+//      A rename that misses the launcher would leave the keybind addressing a
+//      window that does not exist, which is exactly the failure
+//      `extract-capture-gui-tool/proposal.md` records from the last time this
+//      name moved.
 //
 // (1) is a model, not the window, and is labelled as one. The end-to-end proof
 // is the harness described in the change's design.md.
@@ -44,12 +48,6 @@ import { fileURLToPath } from "node:url"
 
 const WINDOW = fileURLToPath(new URL("../../ui/classic/ClassicWindow.tsx", import.meta.url))
 const CSS = fileURLToPath(new URL("../../style.css", import.meta.url))
-const LAUNCHER = fileURLToPath(
-  new URL(
-    "../../../../provisioning/ansible/roles/cli_tools/templates/capture-ui.j2",
-    import.meta.url,
-  ),
-)
 
 function code(path: string): string {
   return readFileSync(path, "utf8")
@@ -226,7 +224,7 @@ function windowName(): string {
   return m[1]
 }
 
-test("the window, the stylesheet and the provisioned launcher agree on the name", () => {
+test("the window and the stylesheet agree on the name", () => {
   const name = windowName()
 
   // style.css matches the window with an ID selector, which in GTK4 matches the
@@ -240,29 +238,17 @@ test("the window, the stylesheet and the provisioned launcher agree on the name"
     `style.css no longer selects the window by its name ("${name}")`,
   )
 
-  // capture-ui.j2 is provisioned to ~/.local/bin/capture-ui, which is what the
-  // SUPER+PRINT keybind runs (dotfiles/config/hypr/keybindings.lua:42-46). If the
-  // window is renamed and this is not, `ags toggle` throws "no window
-  // registered with name" — the keybind launches nothing, silently.
-  const launcher = readFileSync(LAUNCHER, "utf8")
-  const w = /^WINDOW="([^"]+)"/m.exec(launcher)
-  assert.ok(w, "capture-ui.j2 no longer declares WINDOW=")
-  assert.equal(
-    w[1],
-    name,
-    `capture-ui.j2 toggles "${w[1]}" but the window is named "${name}" — the keybind would launch nothing`,
-  )
-  assert.match(
-    launcher,
-    /ags toggle "\$WINDOW" -i "\$INSTANCE"/,
-    "capture-ui.j2 no longer toggles $WINDOW on $INSTANCE",
-  )
+  // The provisioned launcher (`capture-ui.j2`, the SUPER+PRINT keybind's
+  // `ags toggle "$WINDOW" -i "$INSTANCE"`) is a dotfiles-v3 artifact and is
+  // pinned against this same name by dotfiles' copy of this suite, which
+  // remains until the separate deletion change retires the in-place tree. See
+  // the file header.
 })
 
 test("the name is still shared by every monitor's window, by design", () => {
-  // Pinned deliberately. If this ever fails, the three consumers above are the
-  // checklist, and `capture-ui.j2` needs a PROVISION RUN to change — see
-  // design.md §Blast radius.
+  // Pinned deliberately. If this ever fails, the three consumers named in the
+  // file header are the checklist, and `capture-ui.j2` needs a PROVISION RUN to
+  // change — see design.md §Blast radius.
   const source = code(WINDOW)
   assert.equal(
     (source.match(/name="capture-window"/g) ?? []).length,

@@ -36,7 +36,7 @@
 //      because nothing installed @types/node for the `"types": ["node"]` in
 //      tsconfig.tests.json. That is a dependency gap, not an environment
 //      condition, and hiding it in a skip meant the gate reported 114/1 instead
-//      of 115/0 while its own tsc pass could not run at all. `make capture-test`
+//      of 115/0 while its own tsc pass could not run at all. `make capture-tool-tests`
 //      now declares and installs both (its `capture-test-deps` target), so an
 //      unresolvable tsc inside this gate is a real failure and is reported as
 //      one, with the fix named in the message.
@@ -172,7 +172,7 @@ test("app program contains no @types/node files (real compiler evidence)", () =>
   assert.ok(
     tsc,
     "tsc is not resolvable at node_modules/.bin/tsc, so the compiler-evidence " +
-      "check cannot run. Run `make capture-test`, which installs typescript and " +
+      "check cannot run. Run `make capture-tool-tests`, which installs typescript and " +
       "@types/node on demand (capture-test-deps). This gate does not skip when a " +
       "declared dependency is missing.",
   )
@@ -223,7 +223,7 @@ test("app program contains no @types/node files (real compiler evidence)", () =>
   assert.ok(
     testsRes.status === 0,
     `the tests project must typecheck cleanly — it declares "types": ["node"] ` +
-      `and make capture-test installs @types/node for it — but tsc exited ` +
+      `and make capture-tool-tests installs @types/node for it — but tsc exited ` +
       `${testsRes.status}:\n${testsRes.stdout}\n${testsRes.stderr}`,
   )
   const testsNodeTypeFiles = testsRes.stdout
@@ -234,8 +234,8 @@ test("app program contains no @types/node files (real compiler evidence)", () =>
     "the tests program contains no @types/node files, so the app-project check " +
       "above cannot distinguish 'Node types correctly excluded from the GJS app' " +
       "from 'the measurement cannot see @types/node at all'. " +
-      "Run `make capture-test`, which installs @types/node under " +
-      "src/gui-tools/capture-tool/tests/.",
+      "Run `make capture-tool-tests`, which installs @types/node under " +
+      "capture-tool/tests/.",
   )
 
   // The DESKTOP-FREE part of the app must typecheck clean under the app's own
@@ -254,7 +254,7 @@ test("app program contains no @types/node files (real compiler evidence)", () =>
     .split("\n")
     .filter((l) => l.includes("error TS"))
   const oursInDesktopFree = errorLines.filter((l) =>
-    /src\/gui-tools\/capture-tool\/(domain|ports)\/|src\/gui-tools\/capture-tool\/types\.ts/.test(l),
+    /capture-tool\/(domain|ports)\/|capture-tool\/types\.ts/.test(l),
   )
   assert.deepEqual(
     oursInDesktopFree,
