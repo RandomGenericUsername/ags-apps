@@ -5,6 +5,8 @@
 	wallpaper-selector-types wallpaper-selector-typecheck wallpaper-selector-tests \
 	wallpaper-selector-drift-test \
 	icme-types icme-typecheck icme-tests icme-drift-test \
+	btop-theme-studio-types btop-theme-studio-typecheck btop-theme-studio-tests \
+	btop-theme-studio-drift-test btop-theme-studio-live-tests \
 	icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity audio-mock-parity \
 	ags-symbol-check audio-core-test audio-presentation-test pipewire-adapter-test \
 	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
@@ -16,6 +18,7 @@ NOTIF_DIR := notifications
 CAPTURE_DIR := capture-tool
 WALLPAPER_DIR := wallpaper-selector
 ICME_DIR := icme
+BTOP_DIR := btop-theme-studio
 AGS_TESTS := $(BAR_DIR)/tests
 AGS_TS_TESTS := $(AGS_TESTS)/ts
 AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
@@ -61,6 +64,12 @@ help:
 	@echo "icme-typecheck      tsc --noEmit on icme/ (needs the desktop stack)"
 	@echo "icme-tests          pure library suites + icme.saved publisher smoke (stock runner)"
 	@echo "icme-drift-test     shared client + vendored binding <-> contracts drift (stock runner)"
+	@echo ""
+	@echo "btop-theme-studio (REQ-007, slice 8.1):"
+	@echo "btop-theme-studio-typecheck     tsc --noEmit on btop-theme-studio/ (needs the desktop stack)"
+	@echo "btop-theme-studio-tests         pure lib suites + platform acceptance + key-widget verifier (stock runner)"
+	@echo "btop-theme-studio-drift-test    key->widget map re-derived from vendored btop source (stock runner)"
+	@echo "btop-theme-studio-live-tests    real btop on a pty (needs uv + pyte + btop; not in gates-ci)"
 	@echo ""
 	@echo "re-homed bar guards (ticket/bar7-rehome-guards):"
 	@echo "icons-json-drift        bar/icons.json == role projection of icons.yaml"
@@ -624,6 +633,95 @@ icme-drift-test: ags-platform-dev
 	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(ICME_TESTS)/event-contract-drift.mjs
 
 # ---------------------------------------------------------------------------
+# btop-theme-studio (REQ-007, slice 8.1) -- per-app typecheck + tests + drift.
+#
+# Mirrors bar/ / hypr-pano/ / notifications/ / capture-tool/ /
+# wallpaper-selector/ / icme/: the app-local Makefile was dropped on the move.
+# `btop-theme-studio-typecheck` needs `ags` + the GIR types, so it runs on the
+# self-hosted CI job. `btop-theme-studio-tests` and
+# `btop-theme-studio-drift-test` are pure (node + python3) and run on a stock
+# runner in `gates-ci`. `btop-theme-studio-live-tests` needs the real btop
+# binary + uv + pyte, so it stays a self-hosted/manual target.
+# ---------------------------------------------------------------------------
+BTOP_TESTS := $(BTOP_DIR)/tests
+
+# btop-theme-studio-types -- generate this machine's GIR declarations in-tree,
+# the same shape as icme-types. `ags types -d btop-theme-studio -u` writes
+# btop-theme-studio/@girs/, btop-theme-studio/env.d.ts and a colliding
+# btop-theme-studio/tsconfig.json (the committed typecheck config deliberately
+# uses the non-colliding name tsconfig.btop.json).
+btop-theme-studio-types:
+	@if [ -d "$(BTOP_DIR)/@girs" ]; then \
+		echo "==> btop-theme-studio-types: @girs/ already generated, skipping (rm -rf $(BTOP_DIR)/@girs to force)"; \
+	else \
+		echo "==> btop-theme-studio-types: generating GIR types (~2-4 min, needs network, requires the desktop stack)"; \
+		ags types -d "$(CURDIR)/$(BTOP_DIR)" -u || exit 1; \
+	fi
+
+# btop-theme-studio-typecheck -- ZERO errors allowed in btop-theme-studio/.
+# Error buckets mirror icme-typecheck: fail on errors in THIS repo's tree;
+# tolerate and count the AGS runtime's own (/usr/share/ags/js/) and the
+# external platform unit's (AD-17).
+btop-theme-studio-typecheck: ags-platform-dev btop-theme-studio-types
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> btop-theme-studio-typecheck: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@mkdir -p "$(BTOP_DIR)/node_modules"
+	@[ -e "$(BTOP_DIR)/node_modules/ags" ] || ln -sfn /usr/share/ags/js "$(BTOP_DIR)/node_modules/ags"
+	@[ -e "$(BTOP_DIR)/node_modules/gnim" ] || ln -sfn /usr/share/ags/js/node_modules/gnim "$(BTOP_DIR)/node_modules/gnim"
+	@echo "==> btop-theme-studio-typecheck: tsc --noEmit -p $(BTOP_DIR)/tsconfig.btop.json"
+	@log=$$(mktemp); \
+	npx tsc --noEmit -p "$(BTOP_DIR)/tsconfig.btop.json" > "$$log" 2>&1; \
+	ours=$$(grep 'error TS' "$$log" | grep -F "$(BTOP_DIR)/" | grep -vF 'ags-platform/' || true); \
+	thirdparty=$$(grep 'error TS' "$$log" | grep -F '/usr/share/ags/js/' || true); \
+	platform=$$(grep 'error TS' "$$log" | grep -F 'ags-platform/' || true); \
+	other=$$(grep 'error TS' "$$log" | grep -vF "$(BTOP_DIR)/" | grep -vF '/usr/share/ags/js/' | grep -vF 'ags-platform/' || true); \
+	echo "    tolerated third-party errors (/usr/share/ags/js): $$(printf '%s\n' "$$thirdparty" | grep -c . || true)"; \
+	echo "    tolerated ags-platform errors (external unit, AD-17): $$(printf '%s\n' "$$platform" | grep -c . || true)"; \
+	if [ -n "$$other" ]; then \
+		echo "FAIL: errors in neither the btop-theme-studio tree nor the known ags runtime:"; \
+		printf '%s\n' "$$other"; rm -f "$$log"; exit 1; \
+	fi; \
+	if [ -n "$$ours" ]; then \
+		echo "FAIL: type errors in $(BTOP_DIR):"; \
+		printf '%s\n' "$$ours"; rm -f "$$log"; exit 1; \
+	fi; \
+	echo "    OK: 0 errors in $(BTOP_DIR)"; \
+	rm -f "$$log"
+
+# btop-theme-studio-tests -- the studio's PURE suites (theme keys/conf parsing,
+# key attribution, theme model, schematic, preview controls, save targets), the
+# platform-consumption acceptance checks, and the key->widget verifier's
+# drift-guard cases. No desktop stack: those modules import nothing from
+# `ags/*` or `gi://*`; the verifier shells out to python3. Runs on a stock
+# runner.
+btop-theme-studio-tests:
+	@command -v node >/dev/null || { echo "FAIL: btop-theme-studio-tests: node is not on PATH" >&2; exit 1; }
+	@for suite in theme-keys btop-conf key-map key-widgets-verify theme-model \
+		schematic preview targets platform-consumption; do \
+		echo "==> btop-theme-studio-tests: node $(BTOP_TESTS)/$$suite.mjs"; \
+		node $(BTOP_TESTS)/$$suite.mjs || exit 1; \
+	done
+
+# btop-theme-studio-drift-test -- re-derive the canonical key->widget artifact
+# from the vendored btop v1.4.7 sources and fail on any drift. This is the
+# studio's "drift gate": it has no event-contract topic, so the generated
+# artifact is the contract that must not rot.
+btop-theme-studio-drift-test:
+	@command -v python3 >/dev/null || { echo "FAIL: btop-theme-studio-drift-test: python3 is not on PATH" >&2; exit 1; }
+	@echo "==> btop-theme-studio-drift-test: key_widgets.py --verify"
+	@python3 $(BTOP_DIR)/tools/key_widgets.py $(BTOP_DIR)/tools/btop_draw.v1.4.7.cpp \
+		$(BTOP_DIR)/tools/btop_theme.cpp $(BTOP_DIR)/lib/key_widgets.json --verify
+
+# btop-theme-studio-live-tests -- the real-pty live engine (needs btop, uv,
+# pyte). Deliberately NOT in gates-ci: it is not a stock-runner gate.
+btop-theme-studio-live-tests:
+	@command -v uv >/dev/null || { echo "FAIL: btop-theme-studio-live-tests: uv is not on PATH" >&2; exit 1; }
+	@echo "==> btop-theme-studio-live-tests: uv run --with pyte pytest $(BTOP_DIR)/live/tests -q"
+	@uv run --with pyte --with pytest pytest $(BTOP_DIR)/live/tests -q
+
+# ---------------------------------------------------------------------------
 # Re-homed notifications guard (REQ-002, slice 4; ticket/notif4-migrate).
 #
 # `speedtest-no-new-architecture` was authored in dotfiles-v3 against
@@ -781,4 +879,12 @@ WALLPAPER_GUARDS := wallpaper-selector-tests wallpaper-selector-drift-test
 # `icme-typecheck` needs the desktop stack and runs on the self-hosted CI job.
 ICME_GUARDS := icme-tests icme-drift-test
 
-gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS) $(ICME_GUARDS)
+# The btop-theme-studio pure gates (REQ-007, slice 8.1): the library suites,
+# the platform-consumption acceptance checks and the generated key->widget
+# drift re-derivation need only node + python3, so they belong on the stock
+# runner. `btop-theme-studio-typecheck` needs the desktop stack and runs on the
+# self-hosted CI job; `btop-theme-studio-live-tests` needs a real btop binary
+# and is never a stock-runner gate.
+BTOP_GUARDS := btop-theme-studio-tests btop-theme-studio-drift-test
+
+gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS) $(ICME_GUARDS) $(BTOP_GUARDS)

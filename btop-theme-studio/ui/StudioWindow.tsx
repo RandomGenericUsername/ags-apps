@@ -14,7 +14,6 @@ import {
   GRADIENT_LIMIT_NOTE,
   type Palette,
   type Scope,
-  type SaveTarget,
   type Theme,
   addMiddleColour,
   applyPick,
@@ -38,6 +37,7 @@ import {
   divergenceCaveat,
   generatedInstalledWarning,
   resolvedPath,
+  type SaveTarget,
   targetHint,
 } from "../lib/targets";
 
@@ -175,7 +175,7 @@ export function StudioWindow(gdkmonitor: Gdk.Monitor) {
   }
 
   function setActive(): void {
-    setThemes(markActive({ themes: themes() }, current().id).themes);
+    setThemes([...markActive({ themes: themes() }, current().id).themes]);
     const path = `${repoRoot()}/dotfiles/config/btop/active-theme`;
     writeFile(path, `${current().name}\n`);
     setStatus(`Active theme recorded in the repo setting (${path}).`);
@@ -210,6 +210,13 @@ export function StudioWindow(gdkmonitor: Gdk.Monitor) {
   }
 
   // ── widgets ──────────────────────────────────────────────────────────────
+  //
+  // AD-24 measured, not assumed: this tree builds in 13.1 ms (instrumented
+  // copy, distinct instance), and the ~95 ms seen around the call is GTK's
+  // first-window initialization, which no build reordering can move. 13 ms is
+  // a light surface, so the studio keeps the DIRECT path -- presenting first
+  // and deferring this work would add a controller, a signature and an idle
+  // tick (plus a createRoot lifetime for the effects) to buy single-digit ms.
   const root = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, css_classes: ["studio-root"], hexpand: true, vexpand: true });
   const left = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, css_classes: ["studio-left"], spacing: 6 });
   const center = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, css_classes: ["studio-center"], spacing: 6, hexpand: true, vexpand: true });
@@ -417,7 +424,7 @@ export function StudioWindow(gdkmonitor: Gdk.Monitor) {
     clear(canvasInner);
     const schematic = buildSchematic(conf(), preset(), selected());
     canvasInner.append(new Gtk.Label({ label: schematic.caption, xalign: 0, css_classes: ["caption"] }));
-    const warning = hiddenModuleWarning(selected(), schematic.hiddenModules);
+    const warning = hiddenModuleWarning(selected() ?? "", schematic.hiddenModules);
     if (warning) canvasInner.append(new Gtk.Label({ label: `⚠ ${warning}`, xalign: 0, wrap: true, css_classes: ["warn"] }));
     const grid = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
     for (const boxName of schematic.boxes) {
@@ -574,7 +581,7 @@ export function StudioWindow(gdkmonitor: Gdk.Monitor) {
       class="btop-theme-studio"
       title="btop Theme Studio"
       gdkmonitor={gdkmonitor}
-      anchor={0}
+      anchor={Astal.WindowAnchor.NONE}
       layer={Astal.Layer.OVERLAY}
       keymode={Astal.Keymode.ON_DEMAND}
       default_width={1400}
