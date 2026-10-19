@@ -4,6 +4,7 @@
 	capture-tool-types capture-tool-typecheck capture-tool-tests capture-tool-tests-deps \
 	wallpaper-selector-types wallpaper-selector-typecheck wallpaper-selector-tests \
 	wallpaper-selector-drift-test \
+	icme-types icme-typecheck icme-tests icme-drift-test \
 	icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity audio-mock-parity \
 	ags-symbol-check audio-core-test audio-presentation-test pipewire-adapter-test \
 	audio-session-runtime-test audio-panel-render-test audio-icons-test audio-seek-stability-test \
@@ -14,6 +15,7 @@ PANO_DIR := hypr-pano
 NOTIF_DIR := notifications
 CAPTURE_DIR := capture-tool
 WALLPAPER_DIR := wallpaper-selector
+ICME_DIR := icme
 AGS_TESTS := $(BAR_DIR)/tests
 AGS_TS_TESTS := $(AGS_TESTS)/ts
 AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
@@ -54,6 +56,11 @@ help:
 	@echo "wallpaper-selector-typecheck     tsc --noEmit on wallpaper-selector/ (needs the desktop stack)"
 	@echo "wallpaper-selector-tests         pure-model unit tests (stock runner)"
 	@echo "wallpaper-selector-drift-test    shared event client <-> contracts drift (stock runner)"
+	@echo ""
+	@echo "icme (REQ-006, slice 7):"
+	@echo "icme-typecheck      tsc --noEmit on icme/ (needs the desktop stack)"
+	@echo "icme-tests          pure library suites + icme.saved publisher smoke (stock runner)"
+	@echo "icme-drift-test     shared client + vendored binding <-> contracts drift (stock runner)"
 	@echo ""
 	@echo "re-homed bar guards (ticket/bar7-rehome-guards):"
 	@echo "icons-json-drift        bar/icons.json == role projection of icons.yaml"
@@ -533,6 +540,90 @@ wallpaper-selector-drift-test: ags-platform-dev
 	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(WALLPAPER_DIR)/tests/event-contract-drift.mjs
 
 # ---------------------------------------------------------------------------
+# icme (REQ-006, slice 7) -- per-app typecheck + tests + drift.
+#
+# Mirrors bar/ / hypr-pano/ / notifications/ / capture-tool/ /
+# wallpaper-selector/: the app-local Makefile was dropped on the move (its
+# targets are re-homed here, not deleted: the seven pure suites the old `make
+# test` ran still run, now from the repo root). `icme-typecheck` needs the
+# desktop stack (machine-specific @girs/), so it runs on the self-hosted CI job;
+# `icme-tests` and `icme-drift-test` are pure (node + the shared client) and run
+# on a stock runner.
+# ---------------------------------------------------------------------------
+
+ICME_TESTS := $(ICME_DIR)/tests
+
+# icme-types -- generate this machine's GIR declarations in-tree, the same shape
+# as bar-types / hypr-pano-types / notifications-types / wallpaper-selector-types.
+# `ags types -d icme -u` writes icme/@girs/, icme/env.d.ts and a colliding
+# icme/tsconfig.json (the committed config is tsconfig.icme.json precisely so it
+# survives).
+icme-types:
+	@if [ -d "$(ICME_DIR)/@girs" ]; then \
+		echo "==> icme-types: @girs/ already generated, skipping (rm -rf $(ICME_DIR)/@girs to force)"; \
+	else \
+		echo "==> icme-types: generating GIR types (~2-4 min, needs network, requires the desktop stack)"; \
+		ags types -d "$(CURDIR)/$(ICME_DIR)" -u || exit 1; \
+	fi
+
+# icme-typecheck -- ZERO errors allowed in icme/. Error buckets mirror
+# bar-typecheck: fail on errors in THIS repo's tree; tolerate and count the AGS
+# runtime's own (/usr/share/ags/js/) and the external platform unit's (AD-17).
+icme-typecheck: ags-platform-dev icme-types
+	@if [ ! -x node_modules/.bin/tsc ]; then \
+		echo "==> icme-typecheck: installing typescript (npm install --no-save, ignored by git)"; \
+		npm install --no-save --no-package-lock typescript@5.9 >/dev/null || exit 1; \
+	fi
+	@mkdir -p "$(ICME_DIR)/node_modules"
+	@[ -e "$(ICME_DIR)/node_modules/ags" ] || ln -sfn /usr/share/ags/js "$(ICME_DIR)/node_modules/ags"
+	@[ -e "$(ICME_DIR)/node_modules/gnim" ] || ln -sfn /usr/share/ags/js/node_modules/gnim "$(ICME_DIR)/node_modules/gnim"
+	@echo "==> icme-typecheck: tsc --noEmit -p $(ICME_DIR)/tsconfig.icme.json"
+	@log=$$(mktemp); \
+	npx tsc --noEmit -p "$(ICME_DIR)/tsconfig.icme.json" > "$$log" 2>&1; \
+	ours=$$(grep 'error TS' "$$log" | grep -F "$(ICME_DIR)/" | grep -vF 'ags-platform/' || true); \
+	thirdparty=$$(grep 'error TS' "$$log" | grep -F '/usr/share/ags/js/' || true); \
+	platform=$$(grep 'error TS' "$$log" | grep -F 'ags-platform/' || true); \
+	other=$$(grep 'error TS' "$$log" | grep -vF "$(ICME_DIR)/" | grep -vF '/usr/share/ags/js/' | grep -vF 'ags-platform/' || true); \
+	echo "    tolerated third-party errors (/usr/share/ags/js): $$(printf '%s\n' "$$thirdparty" | grep -c . || true)"; \
+	echo "    tolerated ags-platform errors (external unit, AD-17): $$(printf '%s\n' "$$platform" | grep -c . || true)"; \
+	if [ -n "$$other" ]; then \
+		echo "FAIL: errors in neither the icme tree nor the known ags runtime:"; \
+		printf '%s\n' "$$other"; rm -f "$$log"; exit 1; \
+	fi; \
+	if [ -n "$$ours" ]; then \
+		echo "FAIL: type errors in $(ICME_DIR):"; \
+		printf '%s\n' "$$ours"; rm -f "$$log"; exit 1; \
+	fi; \
+	echo "    OK: 0 errors in $(ICME_DIR)"; \
+	rm -f "$$log"
+
+# icme-tests -- the editor's PURE library suites (substitution contract, svg
+# parsing/painting, selection model, YAML diff rendering, template edits) plus
+# the `icme.saved` publisher smoke. No desktop stack: those modules import
+# nothing from `ags/*` or `gi://*`, and the publisher core imports only the
+# generated binding + the platform's pure event client, so plain `node` runs
+# them on a stock runner. (The drift gate runs separately because it also needs
+# the canonical `contracts` checkout.)
+icme-tests: ags-platform-dev
+	@command -v node >/dev/null || { echo "FAIL: icme-tests: node is not on PATH" >&2; exit 1; }
+	@for suite in contract svg model diff templates icme-saved-smoke; do \
+		echo "==> icme-tests: node $(ICME_TESTS)/$$suite.mjs"; \
+		node $(ICME_TESTS)/$$suite.mjs || exit 1; \
+	done
+
+# icme-drift-test -- the repointed drift gate. Pins the SHARED platform event
+# client (AD-5) and the VENDORED generated binding (AD-6) against the canonical
+# contract, exercises the shared subscribe-before-read hydration state machine
+# for `wallpaper.state`, asserts the `icme.saved` publish shape, and checks the
+# app-local event-bus / event-contract / theme copies are gone. Pure: no desktop
+# stack, so it runs on a stock runner. The contract lives in the sibling
+# `contracts` repo (CONTRACTS_ROOT; the test also self-searches) and a missing
+# contract FAILS -- never a silent skip.
+icme-drift-test: ags-platform-dev
+	@command -v node >/dev/null || { echo "FAIL: icme-drift-test: node is not on PATH" >&2; exit 1; }
+	CONTRACTS_REPO="$(CONTRACTS_ROOT)" node $(ICME_TESTS)/event-contract-drift.mjs
+
+# ---------------------------------------------------------------------------
 # Re-homed notifications guard (REQ-002, slice 4; ticket/notif4-migrate).
 #
 # `speedtest-no-new-architecture` was authored in dotfiles-v3 against
@@ -684,4 +775,10 @@ CAPTURE_GUARDS := capture-tool-tests
 # on the self-hosted CI job, never here.
 WALLPAPER_GUARDS := wallpaper-selector-tests wallpaper-selector-drift-test
 
-gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS)
+# The icme pure gates (REQ-006): the library suites, the `icme.saved` publisher
+# smoke and the repointed drift gate need only node + the shared client +
+# the canonical `contracts` checkout, so they belong on the stock runner.
+# `icme-typecheck` needs the desktop stack and runs on the self-hosted CI job.
+ICME_GUARDS := icme-tests icme-drift-test
+
+gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS) $(ICME_GUARDS)

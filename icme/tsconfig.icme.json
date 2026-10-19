@@ -1,0 +1,67 @@
+{
+  "//": [
+    "Typecheck config for the icme tree (ags-apps/icme) — the icon colour",
+    "mapping editor (REQ-006). HAND-WRITTEN AND COMMITTED.",
+    "",
+    "WHY THIS GATE EXISTS: `ags bundle` TRANSPILES WITHOUT TYPE CHECKING, so a",
+    "type error is an app that builds and fails at runtime. Same posture as the",
+    "bar's tsconfig.bar.json and the other migrated apps' configs.",
+    "",
+    "`ags types -u` writes its OWN `tsconfig.json` into whichever directory it",
+    "runs against and OVERWRITES it on every run, so this file deliberately",
+    "uses a non-colliding name. Do not rename it to tsconfig.json.",
+    "",
+    "`make icme-types` runs `ags types -d icme -u`, generating this tree's OWN",
+    "@girs/ + env.d.ts: the GIR modules describe THIS machine, not the",
+    "consuming tree. The Makefile gate declares that dependency explicitly.",
+    "",
+    "The `ags`/`ags/*` paths map (identical to tsconfig.bar.json) makes `ags`",
+    "resolve for EVERY file in the program, including the external platform's",
+    "adapters (which import `ags/gtk4/app`), instead of depending on where a",
+    "per-directory symlink happens to sit. `resolveJsonModule` is required",
+    "because the platform's adapters/icon-registry.ts imports its own icons.json.",
+    "`skipLibCheck` skips the generated @girs/ identifier clashes. `lib` needs",
+    "ES2022+DOM for the gnim JSX runtime."
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "ags/gtk4",
+
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "target": "ES2020",
+    "strict": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "ags": ["/usr/share/ags/js/lib/index.ts"],
+      "ags/*": ["/usr/share/ags/js/lib/*"]
+    },
+
+    // The generated binding is imported with an explicit `.ts` specifier so
+    // plain `node` (type-stripping) can execute the pure publisher in tests.
+    // `noEmit` is passed on the command line, which is what this requires;
+    // `ags bundle` (esbuild) resolves the same specifier.
+    "allowImportingTsExtensions": true,
+
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"],
+    "resolveJsonModule": true
+  },
+  "include": [
+    // App sources. Globs, not a file list, so new components are covered the
+    // moment they appear without editing this config.
+    "**/*.ts",
+    "**/*.tsx",
+
+    // REQUIRED: naming the GIR index pulls the whole transitive closure in.
+    // (`make icme-types` generates these from THIS host's GTK/Astal.)
+    "@girs/index.d.ts",
+
+    // Generated ambient declarations for `*.css` (the `style` import).
+    "env.d.ts"
+  ],
+  // `tests/` holds the node-run gates (`.mjs`), not app code; they are executed
+  // by `make icme-tests` / `make icme-drift-test`, never compiled here.
+  "exclude": ["node_modules", "tests"]
+}
