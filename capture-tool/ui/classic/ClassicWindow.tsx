@@ -386,6 +386,31 @@ export function ClassicWindow(
         self.add_controller(keys)
         // Re-read persisted choices on every show so the window reflects
         // captures that happened while it was hidden.
+        //
+        // AD-24 (surface before content, CONDITIONAL) is NOT triggered here, so
+        // the overlay-lifecycle primitive is deliberately not adopted. The
+        // window TREE is built ONCE, at startup, by
+        // `adapters/monitor-window-set.ts#reconcile`; a show does NOT rebuild
+        // it. Measured on the live compositor (Hyprland), an instrumented copy
+        // under a distinct instance name (`capmeasure`, the live instance
+        // untouched), GLib.get_monotonic_time around the synchronous calls:
+        //
+        //   ClassicWindow construct (1st, cold):  6.96-7.29 ms
+        //   ClassicWindow construct (warm):       3.97-4.57 ms
+        //   add_window:                           0.028-0.035 ms
+        //   open path (windowSet reconcile):      ~8.0 ms (dominated by the cold construct)
+        //   show -> first idle after present:     5.6-6.2 ms (first)
+        //                                         0.18-0.20 ms (recurring)
+        //   set_visible (the `ags toggle` path):  1.49-1.85 ms (recurring)
+        //   set_visible (FIRST ever show):        85.6-95.4 ms (one-time
+        //                                         process/layer-shell warm-up)
+        //
+        // The recurring open path is single-digit ms and the ~90 ms first show
+        // is a one-time per-process surface/compositor warm-up, not a per-open
+        // content build -- so there is no heavy build to defer behind the
+        // surface. Adding the primitive would be indirection for an
+        // imperceptible win; the direct path stays (same conclusion as the bar's
+        // revert and the notifications slice). Harness: /tmp/opencode/cap-measure.
         self.connect("map", () => {
           applyStateToUi()
           // ON_DEMAND (like hypr-pano) never steals the keyboard from other
