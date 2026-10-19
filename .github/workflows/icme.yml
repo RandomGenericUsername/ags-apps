@@ -1,0 +1,56 @@
+name: icme
+
+# Per-app CI for icme (REQ-006): the editor's typecheck + library tests +
+# drift gate.
+#
+# Split by runner capability, mirroring bar.yml / hypr-pano.yml /
+# notifications.yml / capture-tool.yml / wallpaper-selector.yml:
+# `icme-tests` and `icme-drift-test` need only Node + the shared platform client
+# + the canonical `contracts` checkout, so they run on a stock `ubuntu-latest`
+# runner; `icme-typecheck` needs `ags` on PATH plus the Astal/GIR libraries and
+# generates ~49 MB of machine-specific .d.ts, so it runs on a
+# `[self-hosted, linux]` runner that HAS the desktop stack.
+#
+# TRIGGER. This repository's default branch is `main`; PRs from any branch are
+# still checked via `pull_request` (unfiltered).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  icme-tests:
+    name: icme-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run the icme pure library suites + publisher smoke
+        run: make icme-tests
+
+  icme-drift-test:
+    name: icme-drift-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check out the canonical event contract
+        uses: actions/checkout@v4
+        with:
+          repository: RandomGenericUsername/contracts
+          path: contracts
+      - name: Run the drift gate
+        run: CONTRACTS_ROOT="$GITHUB_WORKSPACE/contracts" make icme-drift-test
+
+  icme-typecheck:
+    name: icme-typecheck
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck the icme tree
+        run: make icme-typecheck
