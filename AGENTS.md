@@ -27,9 +27,15 @@ Format: any non-trivial claim gets an `Evidence:` line and a `Verify:` line (how
 - Never work on main: `scripts/worktree-guard.sh create <id> <slug>` scaffolds `ticket/<id>-<slug>` + worktree, aborts when dirty. Record worktree/branch in the ticket.
 - Keep changes small, verifiable, committable. Never mix planning edits with implementation in one turn.
 
-## 4. CI secrets
+## 4. CI scope: stock runners only, typecheck is LOCAL
 
-The `contracts` repo is **private**, so the default `GITHUB_TOKEN` cannot read it. The drift jobs in `icme.yml`, `hypr-pano.yml`, `notifications.yml` and `wallpaper-selector.yml` check it out with `token: ${{ secrets.CONTRACTS_READ_TOKEN }}`.
+**Local is the authority.** CI exists to catch stock-runner regressions, not to reproduce the desktop stack.
 
-- `CONTRACTS_READ_TOKEN` must be a **fine-grained PAT with `contents: read`** on `RandomGenericUsername/contracts`.
-- Without it (absent, expired, or lacking that permission) those four jobs fail at "Check out the canonical event contract" with `Not Found`; the following "Assert the canonical contract is present" step then fails with an explicit message rather than a raw ENOENT from the drift test.
+- **Typecheck is a LOCAL gate.** Run `make <app>-typecheck` (e.g. `make bar-typecheck`, `make icme-typecheck`) before merging. It needs `ags` on PATH plus the Astal/GIR libraries and generates ~49 MB of machine-specific `.d.ts`, so it cannot run on a stock runner.
+- **CI runs only stock-runner jobs** (`ubuntu-latest`): the pure-module tests (`make <app>-tests`), the drift gates, the capture-tool backend pytest suite, and the speedtest architecture gate. `.github/workflows/` contains no other kind of job.
+- **No self-hosted typecheck jobs.** GitHub reports **0** registered runners for this repo (`gh api repos/RandomGenericUsername/ags-apps/actions/runners` → `total_count: 0`), so such jobs queued forever without ever reporting. They were removed; do not re-add one expecting a runner to exist.
+- **No CI secrets for contracts.** `contracts` is **public**, so the drift jobs check it out with the default token (no `token:` override). The "Assert the canonical contract is present" step stays as a fail-fast guard for a missing checkout.
+
+Evidence: `.github/workflows/*.yml` (all jobs `runs-on: ubuntu-latest`); `git log --oneline -- .github/workflows/`.
+
+Verify: `grep -rn 'self-hosted\|CONTRACTS_READ_TOKEN' .github/workflows/` → no matches; `make gates-ci`.

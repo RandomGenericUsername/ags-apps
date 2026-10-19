@@ -107,8 +107,8 @@ make icme-drift-test    shared client + vendored binding <-> contracts drift
 ```
 
 `icme-tests` and `icme-drift-test` are pure and run in `make gates-ci`;
-`icme-typecheck` needs the machine's GIR types and runs on the self-hosted CI
-job.
+`icme-typecheck` needs the machine's GIR types and is a local gate
+(never a CI job).
 
 Provisioned as `<install>/config/ags-icme/` with launcher
 `icon-color-mapping-editor` (SUPER+I).
