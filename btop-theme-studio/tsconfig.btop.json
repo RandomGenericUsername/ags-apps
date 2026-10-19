@@ -1,0 +1,63 @@
+{
+  "//": [
+    "Typecheck config for the btop Theme Studio tree (ags-apps/btop-theme-studio, REQ-007).",
+    "HAND-WRITTEN AND COMMITTED.",
+    "",
+    "WHY THIS GATE EXISTS: `ags bundle` TRANSPILES WITHOUT TYPE CHECKING, so a",
+    "type error is an app that builds and fails at runtime. Same posture as the",
+    "bar's tsconfig.bar.json and the other migrated apps' configs.",
+    "",
+    "`ags types -u` writes its OWN `tsconfig.json` into whichever directory it",
+    "runs against and OVERWRITES it on every run, so this file deliberately uses",
+    "a non-colliding name. Do not rename it to tsconfig.json.",
+    "",
+    "`make btop-theme-studio-types` runs `ags types -d btop-theme-studio -u`,",
+    "generating this tree's OWN @girs/ + env.d.ts: the GIR modules describe THIS",
+    "machine, not the consuming tree.",
+    "",
+    "The `ags`/`ags/*` paths map (identical to tsconfig.icme.json) makes `ags`",
+    "resolve for EVERY file in the program, including the external platform's",
+    "adapters (which import `ags/gtk4/app`). `skipLibCheck` skips the generated",
+    "@girs/ identifier clashes. `lib` needs ES2022+DOM for the gnim JSX runtime."
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "ags/gtk4",
+
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "target": "ES2020",
+    "strict": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "ags": ["/usr/share/ags/js/lib/index.ts"],
+      "ags/*": ["/usr/share/ags/js/lib/*"]
+    },
+
+    // The app's lib modules are imported with explicit `.ts` specifiers so
+    // plain `node` (type-stripping) can execute them in the pure test suites.
+    // `noEmit` is passed on the command line, which is what this requires.
+    "allowImportingTsExtensions": true,
+
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"],
+    "resolveJsonModule": true
+  },
+  "include": [
+    // App sources. Globs, not a file list, so new components are covered the
+    // moment they appear without editing this config.
+    "**/*.ts",
+    "**/*.tsx",
+
+    // REQUIRED: naming the GIR index pulls the whole transitive closure in.
+    // (`make btop-theme-studio-types` generates these from THIS host's GTK.)
+    "@girs/index.d.ts",
+
+    // Generated ambient declarations for `*.css` (the `style` import).
+    "env.d.ts"
+  ],
+  // `tests/` holds the node-run gates (`.mjs`), not app code; they are executed
+  // by `make btop-theme-studio-tests`, never compiled here.
+  "exclude": ["node_modules", "tests"]
+}

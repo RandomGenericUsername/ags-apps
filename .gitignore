@@ -84,6 +84,15 @@ openspec/worksets/
 /icme/@girs/
 /icme/env.d.ts
 
+# btop-theme-studio typecheck artifacts: the same machine-generated set as the
+# bar's, rebuilt on demand via `make btop-theme-studio-types` /
+# `make ags-platform-dev` (the committed typecheck config is
+# btop-theme-studio/tsconfig.btop.json).
+/btop-theme-studio/node_modules/
+/btop-theme-studio/tsconfig.json
+/btop-theme-studio/@girs/
+/btop-theme-studio/env.d.ts
+
 # The dev-time ags-platform checkout `make ags-platform-dev` fetches on demand
 # (pinned, shallow, anonymous). Deliberately OUTSIDE node_modules: Node refuses
 # to type-strip `.ts` under a real node_modules dir, but realpaths a symlink,

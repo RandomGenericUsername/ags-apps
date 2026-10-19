@@ -1,0 +1,57 @@
+name: btop-theme-studio
+
+# Per-app CI for btop-theme-studio (REQ-007, slice 8.1): the studio's typecheck
+# + pure suites + generated key->widget drift gate.
+#
+# Split by runner capability, mirroring bar.yml / hypr-pano.yml /
+# notifications.yml / capture-tool.yml / wallpaper-selector.yml / icme.yml:
+# `btop-theme-studio-tests` and `btop-theme-studio-drift-test` need only Node +
+# Python 3 (the vendored map verifier), so they run on a stock `ubuntu-latest`
+# runner; `btop-theme-studio-typecheck` needs `ags` on PATH plus the GIR/Astal
+# libraries and generates machine-specific .d.ts, so it runs on a
+# `[self-hosted, linux]` runner that HAS the desktop stack.
+#
+# The live-preview engine suite (`make btop-theme-studio-live-tests`) needs a
+# real btop binary + uv + pyte; it is deliberately not a CI gate.
+#
+# TRIGGER. This repository's default branch is `main`; PRs from any branch are
+# still checked via `pull_request` (unfiltered).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  btop-theme-studio-tests:
+    name: btop-theme-studio-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the studio pure suites + platform acceptance + map verifier
+        run: make btop-theme-studio-tests
+
+  btop-theme-studio-drift-test:
+    name: btop-theme-studio-drift-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Re-derive the key->widget map from the vendored btop sources
+        run: make btop-theme-studio-drift-test
+
+  btop-theme-studio-typecheck:
+    name: btop-theme-studio-typecheck
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck the btop-theme-studio tree
+        run: make btop-theme-studio-typecheck
