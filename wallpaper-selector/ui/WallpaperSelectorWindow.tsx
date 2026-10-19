@@ -12,11 +12,18 @@ import GdkPixbuf from "gi://GdkPixbuf?version=2.0";
 import GLib from "gi://GLib?version=2.0";
 import Pango from "gi://Pango?version=1.0";
 import { createEffect, createState } from "ags";
-import { refreshPaletteCss } from "../lib/theme";
+// Theming through the platform Theme port (spine AD-13): the adapter owns WHICH
+// artifact is applied, so the app carries no theme.ts copy.
+import { theme } from "ags-platform/adapters/theme";
+// The ONE event client (spine AD-5): the app-local event-bus copies are gone,
+// so the selector consumes `wallpaper.state` through the platform's shared Gio
+// transport + subscribe-before-read core.
+import { domainEvents } from "ags-platform/adapters/event-bus";
+// The platform IconProvider (spine AD-4/AD-7): the shared registry-backed
+// provider replaces the app-local icon-registry.ts copy.
+import { registryProvider } from "ags-platform/adapters/icon";
 import { applyWallpaper } from "../lib/apply";
 import { getContrastPref, regenerateIcons, setContrastPref } from "../lib/contrast";
-import { domainEvents, WALLPAPER_STATE_TOPIC } from "../lib/event-bus";
-import { reloadIconManifest, resolveIcon } from "../lib/icon-registry";
 import {
   DEFAULT_CONTRAST_ENABLED,
   cachedContrastPref,
@@ -34,6 +41,12 @@ import { loadModel, loadModelSmart } from "../lib/scan";
 import { cachedTexture, generateThumb, thumbTexture } from "../lib/thumbnails";
 
 const WINDOW_NAME = "wallpaper-selector-window";
+
+//: The contract topic this selector consumes. The platform's shared client
+//: exports no `WALLPAPER_STATE_TOPIC` constant (the notifications app uses the
+//: literal too); the drift gate pins this literal against
+//: `contracts/event-contract.json` (`topics["wallpaper.state"]`).
+const WALLPAPER_STATE_TOPIC = "wallpaper.state";
 
 function hideWindow(): void {
   const window = app.get_window(WINDOW_NAME);
@@ -74,13 +87,15 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
   let syncingContrast = false;
   let deferredRegenerate: { hash: string; name: string; enabled: boolean } | null = null;
 
-  // Magnifier from the shared ITR-rendered `ui` group (palette-tinted),
-  // stock symbolic fallback — the hypr-pano search row, verbatim pattern.
+  // Magnifier from the platform IconProvider (AD-4/AD-7): the shared
+  // registry-backed provider answers with a tagged `IconSource` — a rendered
+  // FILE (palette-tinted) or a themed NAME on a bare desktop (AD-18) — with a
+  // stock symbolic fallback when the manifest has no art for the group.
   function searchUiIcon(): Gtk.Widget {
-    const path = resolveIcon("ui", "search");
-    if (path !== null) {
+    const source = registryProvider.resolve("ui", "search");
+    if (source !== null && source.kind === "file") {
       try {
-        const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, 18, 18);
+        const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(source.path, 18, 18);
         const picture = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(pixbuf));
         picture.set_content_fit(Gtk.ContentFit.CONTAIN);
         picture.set_size_request(18, 18);
@@ -89,8 +104,14 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
         picture.add_css_class("ws-ui-icon");
         return picture;
       } catch (error) {
-        console.error(`wallpaper-selector: cannot load search icon ${path}: ${error}`);
+        console.error(`wallpaper-selector: cannot load search icon ${source.path}: ${error}`);
       }
+    } else if (source !== null && source.kind === "name") {
+      const named = Gtk.Image.new_from_icon_name(source.name);
+      named.set_pixel_size(18);
+      named.set_halign(Gtk.Align.CENTER);
+      named.set_valign(Gtk.Align.CENTER);
+      return named;
     }
     const fallback = Gtk.Image.new_from_icon_name("system-search-symbolic");
     fallback.set_pixel_size(18);
@@ -761,11 +782,10 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
   // re-rendered search icon whenever a set lands.
   function refreshChrome(): void {
     try {
-      refreshPaletteCss();
+      theme.apply();
     } catch (error) {
       console.error(`wallpaper-selector: style refresh failed: ${error}`);
     }
-    reloadIconManifest();
     const old = searchRow.get_first_child();
     if (old !== null) searchRow.remove(old);
     searchRow.prepend(searchUiIcon());
