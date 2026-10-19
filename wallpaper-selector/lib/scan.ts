@@ -44,10 +44,12 @@ export function spineWallpapersDir(): string {
 export function sha256File(path: string): string {
   const [ok, bytes] = GLib.file_get_contents(path);
   if (!ok || bytes === null) throw new Error(`cannot read ${path}`);
-  return GLib.compute_checksum_for_bytes(
+  const sum = GLib.compute_checksum_for_bytes(
     GLib.ChecksumType.SHA256,
     new GLib.Bytes(bytes),
   );
+  if (sum === null) throw new Error(`cannot hash ${path}`);
+  return sum;
 }
 
 function listDirNames(dir: string): string[] {

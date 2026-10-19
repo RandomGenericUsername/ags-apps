@@ -36,7 +36,11 @@ function cacheKey(sourcePath: string): string | null {
     );
     const mtime = info.get_modification_date_time()?.format_iso8601() ?? "";
     const stamp = `${sourcePath}\0${mtime}\0${info.get_size()}`;
-    return GLib.compute_checksum_for_string(GLib.ChecksumType.SHA256, stamp);
+    // GJS requires the explicit byte length (a 2-arg call throws), and the
+    // stamp carries embedded NUL separators, so hash the whole UTF-8 string
+    // rather than letting a NUL terminate it.
+    const length = new TextEncoder().encode(stamp).length;
+    return GLib.compute_checksum_for_string(GLib.ChecksumType.SHA256, stamp, length);
   } catch {
     return null;
   }

@@ -852,7 +852,14 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
       class="wallpaper-selector-window"
       title="Wallpaper Selector"
       gdkmonitor={gdkmonitor}
-      anchor={0}
+      // `anchor` is an `Astal.WindowAnchor` bit flag (NONE=1, TOP=2, RIGHT=4,
+      // LEFT=8, BOTTOM=16): the bare literal `0` was never a valid value. It
+      // anchored to no edge, and so does NONE: astal_window_set_anchor() reads
+      // only bits 1/2/3/4 and never tests bit 0, so 0 and NONE both hand
+      // gtk_layer_shell four anchored=false edges. Behaviour is identical;
+      // only the type is now honest. Same correction as capture-tool's
+      // ClassicWindow.
+      anchor={Astal.WindowAnchor.NONE}
       halign={Gtk.Align.CENTER}
       valign={Gtk.Align.CENTER}
       layer={Astal.Layer.OVERLAY}
