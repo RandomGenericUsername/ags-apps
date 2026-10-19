@@ -1,7 +1,10 @@
 import app from "ags/gtk4/app"
 import { Gdk } from "ags/gtk4"
-import GLib from "gi://GLib?version=2.0"
 import style from "./style.css"
+// Theming through the platform Theme port (spine AD-13): the adapter owns WHICH
+// artifact is applied — the stable `colors.css` pointer, repointed on every
+// palette change — so this app no longer carries its own `app.apply_css` call.
+import { theme } from "ags-platform/adapters/theme"
 import { execBackendProbe } from "./adapters/exec-backend-probe"
 import { execCaptureLauncher } from "./adapters/exec-capture-launcher"
 import { glibSettingsStore } from "./adapters/glib-settings-store"
@@ -42,7 +45,11 @@ app.start({
   instanceName: "capture",
   css: style,
   main() {
-    app.apply_css(`${GLib.get_user_config_dir()}/ags/colors.css`)
+    try {
+      theme.apply()
+    } catch (error) {
+      console.error(`capture-tool: palette CSS apply failed: ${error}`)
+    }
     const ports = buildPorts()
     // ONE live UI state for the whole app, built here and handed to every
     // window (fix-capture-per-monitor-state). The persisted selections belong
