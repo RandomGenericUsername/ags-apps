@@ -34,6 +34,7 @@ import {
 } from "../lib/theme-model";
 import {
   actionLabel,
+  activeThemePath,
   divergenceCaveat,
   generatedInstalledWarning,
   resolvedPath,
@@ -176,9 +177,9 @@ export function StudioWindow(gdkmonitor: Gdk.Monitor) {
 
   function setActive(): void {
     setThemes([...markActive({ themes: themes() }, current().id).themes]);
-    const path = `${repoRoot()}/dotfiles/config/btop/active-theme`;
+    const path = activeThemePath({ repoRoot: repoRoot(), installDir: installDir() });
     writeFile(path, `${current().name}\n`);
-    setStatus(`Active theme recorded in the repo setting (${path}).`);
+    setStatus(`Active theme recorded in the install spine (${path}).`);
   }
 
   function applyFix(kind: "reserve" | "transparent"): void {

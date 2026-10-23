@@ -18,13 +18,22 @@ export interface TargetContext {
 
 /** The authored-theme repo directory (shipped by provisioning). */
 export const REPO_AUTHORED_DIR = "dotfiles/assets/btop-themes";
-/** The repo-owned active-theme setting rendered into btop.conf. */
-export const REPO_ACTIVE_THEME = "dotfiles/config/btop/active-theme";
 /** The generated theme map (palette-linked base). */
 export const REPO_GENERATED_MAP = "dotfiles/config/btop/theme-map.yaml";
 
 /** The install-spine themes directory btop scans. */
 export const SPINE_THEMES_DIR = "config/btop/themes";
+/** The install-spine active-theme setting rendered into btop.conf (R-07). */
+export const SPINE_ACTIVE_THEME = "config/btop/active-theme";
+
+/**
+ * The host-owned active-theme setting. The studio WRITES this file and the
+ * engine's btop_config role READS it; keeping it in the install spine means a
+ * checkout can never silently revert the user's choice (OPEN-5 / R-07).
+ */
+export function activeThemePath(ctx: TargetContext): string {
+  return `${ctx.installDir}/${SPINE_ACTIVE_THEME}`;
+}
 
 /**
  * The resolved destination for a theme + target, shown read-only in the UI.

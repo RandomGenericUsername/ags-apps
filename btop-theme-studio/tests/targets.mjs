@@ -3,8 +3,10 @@
 //
 // Task 7.1: each target names its resolved path (component test). Task 8.2:
 // the generated theme is fork-only and the Installed target warns for it.
+import { readFileSync } from "node:fs";
 import {
   actionLabel,
+  activeThemePath,
   divergenceCaveat,
   generatedInstalledWarning,
   mustFork,
@@ -30,6 +32,15 @@ const generated = { id: "g", name: "colors.btop", kind: "generated", active: fal
 
 check("repo authored path", resolvedPath(authored, "repo", ctx), "/repo/dotfiles/assets/btop-themes/btop-dusk.theme");
 check("repo generated path", resolvedPath(generated, "repo", ctx), "/repo/dotfiles/config/btop/theme-map.yaml");
+check("active-theme is host state in the spine", activeThemePath(ctx), "/install/config/btop/active-theme");
+
+const studioSource = readFileSync(new URL("../ui/StudioWindow.tsx", import.meta.url), "utf8");
+check("setActive writes through activeThemePath", /activeThemePath\(/.test(studioSource), true);
+check(
+  "no pre-split composition active-theme path remains",
+  studioSource.includes("dotfiles/config/btop/active-theme"),
+  false,
+);
 check("installed authored path", resolvedPath(authored, "installed", ctx), "/install/config/btop/themes/btop-dusk.theme");
 check("installed generated path is the pointer", resolvedPath(generated, "installed", ctx), "/install/config/btop/themes/colors.btop.theme (pointer)");
 
