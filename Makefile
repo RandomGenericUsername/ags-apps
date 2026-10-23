@@ -772,15 +772,17 @@ speedtest-no-new-architecture:
 PY := python3
 
 # icons-json-drift: bar/icons.json must equal the role's projection of
-# icons.yaml + the role's schemaVersion. The authored YAML and the schema-version
-# var stay in dotfiles-v3, which OWNS the provisioning that generates the
-# manifest; this target reads them READ-ONLY (owner decision 2026-10-16). The
-# upward search finds the sibling checkout from both the repo root and a
-# worktree; override DOTFILES_ROOT / ICON_MAPPINGS_YAML / ICON_MAPPINGS_ROLE_VARS
-# when it lives elsewhere. Fails loudly (never skips) when an input is missing.
-DOTFILES_ROOT ?= $(shell d="$(CURDIR)"; for i in 1 2 3 4 5 6; do d="$$(dirname "$$d")"; if [ -f "$$d/dotfiles-v3/dotfiles/config/icon-template-color-scheme-mappings/icons.yaml" ]; then echo "$$d/dotfiles-v3"; break; fi; done)
-ICON_MAPPINGS_YAML ?= $(DOTFILES_ROOT)/dotfiles/config/icon-template-color-scheme-mappings/icons.yaml
-ICON_MAPPINGS_ROLE_VARS ?= $(DOTFILES_ROOT)/src/provisioning/ansible/roles/compositor_configs/vars/main.yml
+# icons.yaml + the role's schemaVersion. Since the assets/engine split the
+# authored YAML is the pinned `dotfiles-assets` icons class and the schema-version
+# var is the pinned `dotfiles-provision` engine role; this target reads them
+# READ-ONLY. The upward search finds the sibling checkouts from both the repo
+# root and a worktree; override ASSETS_ROOT / ENGINE_ROOT / ICON_MAPPINGS_YAML /
+# ICON_MAPPINGS_ROLE_VARS when they live elsewhere. Fails loudly (never skips)
+# when an input is missing.
+ASSETS_ROOT ?= $(shell d="$(CURDIR)"; for i in 1 2 3 4 5 6; do d="$$(dirname "$$d")"; if [ -f "$$d/dotfiles-assets/icons/mappings/icons.yaml" ]; then echo "$$d/dotfiles-assets"; break; fi; done)
+ENGINE_ROOT ?= $(shell d="$(CURDIR)"; for i in 1 2 3 4 5 6; do d="$$(dirname "$$d")"; if [ -f "$$d/dotfiles-provision/ansible/roles/compositor_configs/vars/main.yml" ]; then echo "$$d/dotfiles-provision"; break; fi; done)
+ICON_MAPPINGS_YAML ?= $(ASSETS_ROOT)/icons/mappings/icons.yaml
+ICON_MAPPINGS_ROLE_VARS ?= $(ENGINE_ROOT)/ansible/roles/compositor_configs/vars/main.yml
 
 # The canonical event contract lives in the sibling `contracts` repo (AGENTS:
 # every app depends on ags-platform and contracts). hypr-pano's drift gate reads
@@ -855,8 +857,9 @@ audio-panel-gates: audio-core-test audio-presentation-test pipewire-adapter-test
 # bar-typecheck needs `ags` + Astal/GIR libraries (machine-specific @girs/),
 # so it is a local gate (not a CI job), never here.
 #
-# NOTE: icons-json-drift reads the authored icons.yaml + role var from a sibling
-# dotfiles-v3 checkout (read-only) and needs PyYAML; see that target. Every other
+# NOTE: icons-json-drift reads the authored icons.yaml from the sibling
+# dotfiles-assets checkout and the role var from dotfiles-provision (read-only)
+# and needs PyYAML; see that target. Every other
 # guard here is pure node/python-stdlib.
 BAR_GUARDS := icons-json-drift wifi-mock-parity bluetooth-mock-parity battery-mock-parity \
 	audio-mock-parity ags-symbol-check \

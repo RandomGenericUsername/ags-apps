@@ -9,12 +9,13 @@ input locations changed:
 
   * the generated artifact is now ``bar/icons.json`` (was
     ``dotfiles/config/ags/icons.json``);
-  * the authored source (``icons.yaml``) and the role's schema-version variable
-    stay in dotfiles-v3, which OWNS the provisioning that generates the
-    manifest. This gate reads those two files READ-ONLY (owner decision
-    2026-10-16: re-homing the guard is fine; the asset and its provisioning
-    owner are unchanged). They are therefore found by an upward search for the
-    sibling ``dotfiles-v3`` checkout, or overridden with ``--yaml`` /
+  * the authored source (``icons.yaml``) is the pinned ``dotfiles-assets``
+    icons class, and the role's schema-version variable is the pinned
+    ``dotfiles-provision`` engine role. This gate reads those two files
+    READ-ONLY (owner decision 2026-10-16: re-homing the guard is fine; the
+    asset and its provisioning owner are unchanged). They are therefore found
+    by an upward search for the sibling ``dotfiles-assets`` /
+    ``dotfiles-provision`` checkouts, or overridden with ``--yaml`` /
     ``--role-vars``.
 
 ``bar/icons.json`` is GENERATED OUTPUT, not a source. It is written by the
@@ -44,7 +45,7 @@ up differing from what provisioning actually writes on the next run. So the
 filter is imported and called WHEN ANSIBLE IS IMPORTABLE (run it through the
 provisioning project, as dotfiles did):
 
-    uv run --directory ../dotfiles-v3/src/provisioning python scripts/icons-json-drift.py
+    uv run --directory ../dotfiles-provision python scripts/icons-json-drift.py
 
 THIS REPO HAS NO PROVISIONING PROJECT, so when ansible is NOT importable the
 gate falls back to the documented equivalence
@@ -75,10 +76,12 @@ from pathlib import Path
 JSON_FILE = "bar/icons.json"
 
 # The authored source + the role vars that own the artifact's schema version.
-# Both live in the sibling dotfiles-v3 checkout (read-only); see the docstring.
-DOTFILES_ROOT_DIRNAME = "dotfiles-v3"
-YAML_RELPATH = "dotfiles/config/icon-template-color-scheme-mappings/icons.yaml"
-ROLE_VARS_RELPATH = "src/provisioning/ansible/roles/compositor_configs/vars/main.yml"
+# Since the assets/engine split they live in the sibling `dotfiles-assets`
+# (icons class) and `dotfiles-provision` (engine role) checkouts, read-only.
+ASSETS_ROOT_DIRNAME = "dotfiles-assets"
+ENGINE_ROOT_DIRNAME = "dotfiles-provision"
+YAML_RELPATH = "icons/mappings/icons.yaml"
+ROLE_VARS_RELPATH = "ansible/roles/compositor_configs/vars/main.yml"
 SCHEMA_VERSION_VAR = "compositor_configs_icon_manifest_schema_version"
 
 # The role writes `content: "{{ ... | to_nice_json(indent=2) }}\n"` -- the
@@ -110,16 +113,16 @@ def _nice_json(data: object) -> str:
     return to_nice_json(data, indent=2)
 
 
-def _find_dotfiles_input(root: Path, relpath: str) -> Path | None:
-    """Walk up from ``root`` looking for the sibling dotfiles-v3 checkout.
+def _find_sibling_input(root: Path, dirname: str, relpath: str) -> Path | None:
+    """Walk up from ``root`` looking for a sibling checkout's input file.
 
     ``root`` may be the repo root or a worktree under ``.worktrees/<id>/``, so a
-    fixed ``../dotfiles-v3`` is wrong for worktrees. The search makes the
-    read-only input reachable from both.
+    fixed ``../<repo>`` is wrong for worktrees. The search makes the read-only
+    inputs reachable from both.
     """
     d = root
     for _ in range(6):
-        candidate = d / DOTFILES_ROOT_DIRNAME / relpath
+        candidate = d / dirname / relpath
         if candidate.is_file():
             return candidate
         if d.parent == d:
@@ -134,12 +137,12 @@ def main() -> int:
     ap.add_argument(
         "--yaml",
         default=None,
-        help=f"authored icons.yaml (default: sibling {DOTFILES_ROOT_DIRNAME}/{YAML_RELPATH})",
+        help=f"authored icons.yaml (default: sibling {ASSETS_ROOT_DIRNAME}/{YAML_RELPATH})",
     )
     ap.add_argument(
         "--role-vars",
         default=None,
-        help=f"compositor_configs vars file (default: sibling {DOTFILES_ROOT_DIRNAME}/{ROLE_VARS_RELPATH})",
+        help=f"compositor_configs vars file (default: sibling {ENGINE_ROOT_DIRNAME}/{ROLE_VARS_RELPATH})",
     )
     ap.add_argument("--json", default=None, help=f"generated manifest (default: {JSON_FILE})")
     ap.add_argument(
@@ -159,16 +162,22 @@ def main() -> int:
     root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
     json_path = root / (args.json or JSON_FILE)
 
-    yaml_path = Path(args.yaml) if args.yaml else _find_dotfiles_input(root, YAML_RELPATH)
+    yaml_path = (
+        Path(args.yaml)
+        if args.yaml
+        else _find_sibling_input(root, ASSETS_ROOT_DIRNAME, YAML_RELPATH)
+    )
     role_vars_path = (
-        Path(args.role_vars) if args.role_vars else _find_dotfiles_input(root, ROLE_VARS_RELPATH)
+        Path(args.role_vars)
+        if args.role_vars
+        else _find_sibling_input(root, ENGINE_ROOT_DIRNAME, ROLE_VARS_RELPATH)
     )
 
     if yaml_path is None:
         print(
             f"MISSING source manifest: no {YAML_RELPATH} found under a sibling "
-            f"{DOTFILES_ROOT_DIRNAME}/ checkout. Pass --yaml, or check out dotfiles-v3 "
-            f"beside this repo."
+            f"{ASSETS_ROOT_DIRNAME}/ checkout. Pass --yaml, or check out "
+            f"dotfiles-assets beside this repo."
         )
         return 1
     if not yaml_path.is_file():
@@ -181,7 +190,7 @@ def main() -> int:
         print(
             f"MISSING provisioning role vars: {role_vars_path or ROLE_VARS_RELPATH}. This "
             f"gate stamps the version the role itself would write (spine AD-21) and must "
-            f"not guess it. Pass --role-vars, or check out dotfiles-v3 beside this repo."
+            f"not guess it. Pass --role-vars, or check out dotfiles-provision beside this repo."
         )
         return 1
 
