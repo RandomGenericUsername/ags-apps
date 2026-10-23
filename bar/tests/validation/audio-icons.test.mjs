@@ -108,7 +108,24 @@ assert.equal(
   `media-transport must still serve exactly previous and next; found ${originalUses} use(s)`
 );
 
+// The microphone selector's resting glyph (add-system-icon-variants). The
+// generic DeviceSelector defaults to `system-low`, which only exists in the
+// volume group; the input selector must override it with a real microphone
+// variant or the glyph resolves to nothing and stays blank.
+const microphone = icons.microphone;
+assert.ok(microphone?.variants, "icons.json has no microphone group");
+const micNames = new Set(microphone.variants.map((v) => v.name));
+assert.deepEqual(
+  ["system-mic-on", "system-mic-off"].filter((name) => !micNames.has(name)),
+  [],
+  `microphone must define system-mic-on/off; available: ${[...micNames].sort().join(", ")}`
+);
+assert.ok(
+  popupSrc.includes('fallbackVariant="system-mic-on"'),
+  "the Input DeviceSelector must pass fallbackVariant=\"system-mic-on\" (not system-low)"
+);
+
 console.log(
   `audio-icons: PASS (${expected.length} level variant(s), ${BINARIES.length} app binary(ies) resolve, ` +
-    `${panelUses} panel transport call site(s))`
+    `${panelUses} panel transport call site(s), microphone fallback pinned)`
 );

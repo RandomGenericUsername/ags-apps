@@ -221,12 +221,15 @@ function DeviceSelector({
   devices,
   onSelect,
   iconName,
+  fallbackVariant = "system-low",
 }: {
   title: string
   value: Accessor<string>
   devices: Accessor<readonly { id: string; name: string; available: boolean }[]>
   onSelect: (id: string) => void
   iconName: string
+  /** A real variant in `iconName`'s group; the selector's resting glyph. */
+  fallbackVariant?: string
 }) {
   return (
     <button
@@ -244,7 +247,7 @@ function DeviceSelector({
       $={(self: Gtk.Button) => createEffect(() => accessibleLabel(self, `${title}: ${value()}`))}
     >
       <box spacing={10} hexpand>
-        <image pixel_size={18} $={(self: Gtk.Image) => setImageOnce(self, icon(iconName, "system-low"))} />
+        <image pixel_size={18} $={(self: Gtk.Image) => setImageOnce(self, icon(iconName, fallbackVariant))} />
         <label class="audio-device-select-name" xalign={0} hexpand ellipsize={Pango.EllipsizeMode.END} label={value} />
         <label class="audio-device-chevron" label="▾" />
       </box>
@@ -509,7 +512,7 @@ function InputSection({ binding }: { binding: AudioPanelBinding }) {
         <label class="audio-section-title" hexpand xalign={0} label="Input" />
         <label class="audio-section-hint" label="Preferred microphone" />
       </box>
-      <DeviceSelector title="Input device" value={name} devices={devices} iconName="microphone" onSelect={(endpoint) => binding.actions.selectInput(endpoint)} />
+      <DeviceSelector title="Input device" value={name} devices={devices} iconName="microphone" fallbackVariant="system-mic-on" onSelect={(endpoint) => binding.actions.selectInput(endpoint)} />
       <box class="audio-control-line" spacing={8}>
         <IconButton
           name={createComputed(() => `${name()} microphone ${volume().muted ? "muted" : "unmuted"}`)}
