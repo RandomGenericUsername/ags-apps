@@ -31,7 +31,7 @@
 
 ## Spikes
 
-(none)
+- [SPIKE-001-ags-refresh-patterns/ticket.md](./SPIKE-001-ags-refresh-patterns/ticket.md) — AGS refresh patterns: why some apps live-refresh while others restart (incl. btop-theme-studio) | `boxed` | links: worktree .worktrees/SPIKE-001/, branch ticket/SPIKE-001-ags-refresh-patterns | boxed 2 days
 
 ## Tasks
 
