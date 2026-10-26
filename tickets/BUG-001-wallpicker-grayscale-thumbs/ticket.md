@@ -2,7 +2,7 @@
 id: BUG-001
 title: "Fix grayscale thumbnails for PNG wallpapers (RGBA — gdk-pixbuf JPEG saver bug)"
 kind: bug
-status: in-progress
+status: done
 severity: high
 lane: 2
 links:
@@ -74,3 +74,31 @@ poisoned v1 JPEGs re-hit forever (`cachedTexture` fast path + the per-process
 - [x] Old poisoned entries are no longer read (v2 naming); next open regenerates.
 - [x] `make wallpaper-selector-typecheck` → exit 0.
 - [x] `make wallpaper-selector-tests` + drift gate → exit 0.
+
+## Closing evidence (2026-10-25)
+
+- **Commit:** `4aea5f4 fix(wallpaper-selector): grayscale PNG thumbnails —
+  flatten RGBA before JPEG save` (branch `ticket/BUG-001-grayscale-thumbs`).
+- **v1 reproduction:** python-gi + gjs probes → `savev(…, "jpeg")` on a
+  4-channel pixbuf saturates to 0.0 for all 8 PNG wallpapers tested; 3-channel
+  `.jpg` sources save correctly (0.30-0.69). Probe:
+  `gjs -m /tmp/opencode/flatten-gjs-probe.mjs`.
+- **v2 verification (exact production call sequence in GJS):** background.png
+  0.651, colors.png 0.805, circuit.png 0.218, aurora_dragon.png 0.319,
+  black_eagle.png 0.593, golden_eagle.png 0.978 — all match their sources'
+  saturation; `.jpg` passthrough byte-stable against the pre-fix good values
+  (background 0.689443, aurora 0.50107). Measured with
+  `magick <thumb> -resize 64x64! -colorspace HSL -channel S -separate
+  -format '%[fx:mean]' info:`; color visually confirmed on the regenerated
+  `background.png` card thumb (purple GARUDA scene, was gray mush).
+- **Gates (worktree, 2026-10-25):** `make wallpaper-selector-typecheck` →
+  `OK: 0 errors in wallpaper-selector`; `make wallpaper-selector-tests` →
+  `model: all green`; `make wallpaper-selector-drift-test` → `all checks
+  passed`.
+- **Roll-out note:** the installed selector consumes the pinned `ags-apps`
+  tag, so the fix goes live only after the next tag bump + re-provision
+  (`dotfiles-v3` pin update — separate change). Until then the installed
+  build keeps re-writing v1 (gray) entries into the cache; nothing to do
+  manually — once the fixed build runs, every card thumbnail regenerates as
+  v2 on the first open and v1 files are bypassed (left as harmless disk
+  garbage).
