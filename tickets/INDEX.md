@@ -22,7 +22,7 @@
 
 ## Bugs
 
-(none)
+- [BUG-001-wallpicker-grayscale-thumbs/ticket.md](./BUG-001-wallpicker-grayscale-thumbs/ticket.md) — grayscale thumbnails for PNG wallpapers (RGBA — gdk-pixbuf JPEG saver bug) | severity: high | `done` | links: worktree .worktrees/BUG-001, branch ticket/BUG-001-grayscale-thumbs
 
 ## Ops tasks
 

@@ -3,8 +3,13 @@
 // Full-resolution wallpapers (and their variants) are far too heavy to
 // decode on every open, and the runtime owns no thumbnails — so the
 // selector keeps its own cache under the user cache dir. A cache entry is
-// keyed by `sha256(path + mtime + size)`: content changes under a stable
-// path (re-provisioned tarball) invalidate naturally, renames just miss.
+// keyed by `sha256(path + mtime + size)` plus a `CACHE_VER` tag: content
+// changes under a stable path (re-provisioned tarball) invalidate
+// naturally, renames just miss. The version tag is the only invalidation
+// for entries whose source stats NEVER move — v1 was fully desaturated
+// for every RGBA source (gdk-pixbuf JPEG writer bug, see flattenToRGB)
+// and the poisoned files kept re-hitting forever; v2 starts after the
+// alpha flatten landed.
 
 import Gdk from "gi://Gdk?version=4.0";
 import GdkPixbuf from "gi://GdkPixbuf?version=2.0";
@@ -14,10 +19,20 @@ import GLib from "gi://GLib?version=2.0";
 export const THUMB_MAX_DIM = 360;
 
 // JPEG cache: photos encode ~4x faster than PNG and decode faster too.
-// Wallpapers are opaque photographs, so the missing alpha is irrelevant.
+// JPEG carries no alpha, so RGBA sources are composited onto black before
+// the save (flattenToRGB, below). Over-black is the faithful choice: it is
+// what Hyprland composites a transparent wallpaper against on the live
+// desktop, and this corpus has no visible transparency anyway (BUG-001:
+// 40 spine PNGs — all fully opaque except degenerate junk; WEG dim
+// variants measure min-alpha 179-204, rendered over black live too).
 const CACHE_FORMAT = "jpeg";
 const CACHE_EXT = "jpg";
 const CACHE_QUALITY = "82";
+// Bump whenever the on-disk bytes or the generation recipe change: entries
+// are keyed path+mtime+size alone, so without this tag an old poisoned
+// file keeps re-hitting as long as its source stays untouched. v1 =
+// RGBA-sourced JPEGs written by the pre-flatten code (grayscale, BUG-001).
+const CACHE_VER = "v2";
 
 const memoryCache = new Map<string, Gdk.Texture>();
 
@@ -48,11 +63,51 @@ function cacheKey(sourcePath: string): string | null {
 
 function cachedPath(sourcePath: string, maxDim: number): string | null {
   const key = cacheKey(sourcePath);
-  return key === null ? null : `${thumbnailCacheDir()}/${key}-${maxDim}.${CACHE_EXT}`;
+  if (key === null) return null;
+  // The version tag sits between hash and display size so v1 files (`<key>-
+  // <maxDim>.jpg`) can never match a v2 lookup name (and recursion via the
+  // maxDim suffix stays unique).
+  return `${thumbnailCacheDir()}/${key}-${CACHE_VER}-${maxDim}.${CACHE_EXT}`;
 }
 
 function textureFromPixbuf(pixbuf: GdkPixbuf.Pixbuf): Gdk.Texture {
   return Gdk.Texture.new_for_pixbuf(pixbuf);
+}
+
+/**
+ * gdk-pixbuf's JPEG writer mishandles 4-channel buffers: on this host
+ * (pixbuf 2.44.8) every RGBA source saved through `savev(..., "jpeg", …)`
+ * came out a fully DESATURATED jpeg (sat 0.0 measured per regenerated
+ * file; 3-channel sources saved correctly, sat 0.30-0.69 — BUG-001). So
+ * composite any RGBA pixbuf onto black and hand the save (and the memory
+ * texture) an opaque 3-channel buffer: one definition of "a thumbnail",
+ * disk and memory identical. Freshly `new()`ed RGB pixbufs are zeroed,
+ * i.e. black; a full-area composite with overall_alpha 255 yields
+ * `a*src + (1-a)*0` per pixel — exact for opaque sources, over-black for
+ * translucent ones (which is how the desktop renders them live). */
+function flattenToRGB(pixbuf: GdkPixbuf.Pixbuf): GdkPixbuf.Pixbuf {
+  if (pixbuf.get_n_channels() === 3) return pixbuf;
+  const flat = GdkPixbuf.Pixbuf.new(
+    GdkPixbuf.Colorspace.RGB,
+    false,
+    8,
+    pixbuf.get_width(),
+    pixbuf.get_height(),
+  );
+  pixbuf.composite(
+    flat,
+    0,
+    0,
+    flat.get_width(),
+    flat.get_height(),
+    0,
+    0,
+    1,
+    1,
+    GdkPixbuf.InterpType.BILINEAR,
+    255,
+  );
+  return flat;
 }
 
 function remember(memKey: string, texture: Gdk.Texture): Gdk.Texture {
@@ -91,15 +146,19 @@ export function generateThumb(
   if (mem !== undefined) return mem;
   try {
     const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(sourcePath, maxDim, maxDim);
+    // Flatten BEFORE saving: the RGBA pixbuf is exactly what the jpeg
+    // writer cannot handle (grayscale output, BUG-001), and using the
+    // flattened buffer for the texture as well keeps memory == disk.
+    const opaque = flattenToRGB(pixbuf);
     const cached = cachedPath(sourcePath, maxDim);
     if (cached !== null) {
       try {
-        pixbuf.savev(cached, CACHE_FORMAT, ["quality"], [CACHE_QUALITY]);
+        opaque.savev(cached, CACHE_FORMAT, ["quality"], [CACHE_QUALITY]);
       } catch (error) {
         console.error(`wallpaper-selector: cannot write thumb cache ${cached}: ${error}`);
       }
     }
-    return remember(memKey, textureFromPixbuf(pixbuf));
+    return remember(memKey, textureFromPixbuf(opaque));
   } catch (error) {
     console.error(`wallpaper-selector: cannot thumbnail ${sourcePath}: ${error}`);
     return null;
