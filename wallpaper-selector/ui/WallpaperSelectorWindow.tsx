@@ -731,10 +731,13 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
     if (localApply || eventBusy) return;
     localApply = true;
     refreshBusy();
+    // Contract: the Apply CLICK collapses the drawer immediately. The set
+    // keeps running in the background; `done`/`error` still rescan, refresh
+    // chrome and unlock the controls. Never hide on `visible`: after the
+    // palette reorder that event arrives seconds later, and it would also
+    // close a selector the user reopened while the set was completing.
+    hideWindow();
     setStatus(`applying ${label}…`);
-    // Local flag (not the `status` state): state getters may lag the setter,
-    // and the collapse decision must be deterministic.
-    let ok = false;
     let explicit: "on" | "off" | undefined;
     try {
       // Persist-then-set: the checkbox state for the focused wallpaper must
@@ -762,7 +765,6 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
       await applyWallpaper(path, explicit);
       if (contrastHash !== undefined) pendingContrast.delete(contrastHash);
       setStatus(`done · ${label}`);
-      ok = true;
     } catch (error) {
       setStatus(`failed: ${error}`);
     } finally {
@@ -770,10 +772,9 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
       refreshBusy();
       flushDeferredRegenerate();
       rescan();
-      // Collapse on success (stays open on failure so the error is seen).
-      // The runtime no longer restarts this instance (skip list), so no
-      // reloader will pop the window back open afterwards.
-      if (ok) hideWindow();
+      // No hide here: the click already collapsed the drawer. The set runs in
+      // the background, so the user may have reopened the selector while it
+      // finished; a late hide would close that window uninvited.
     }
   }
 
@@ -803,12 +804,9 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
       eventBusy = true;
       refreshBusy();
       setStatus("wallpaper.state → visible · theming…");
-      // Collapse as soon as the wallpaper is actually on screen instead of
-      // blocking the view for the whole derivation (visible-first). Only for
-      // a set THIS instance initiated — an external set must never dismiss
-      // the window. The process keeps running; `done`/`error` still rescans
-      // and unlocks the controls.
-      if (localApply) hideWindow();
+      // No hide: the Apply click already collapsed the drawer (BUG-002).
+      // External sets must never dismiss the window, and hiding here would
+      // close a selector reopened while theming runs.
     } else if (state === "done") {
       eventBusy = false;
       refreshBusy();

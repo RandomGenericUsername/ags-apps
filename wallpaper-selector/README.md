@@ -70,7 +70,9 @@ Provisioned as `<install>/config/ags-wallpaper-selector/` with launcher
   `wallpaper set` (`auto` resolution). While `wallpaper.state` is
   `applying`/`visible`, Apply controls are insensitive; the checkbox stays
   live and a flip defers its regenerate until `done`/`error`.
-- The window self-hides on successful apply (stays open on failure).
+- Clicking Apply collapses the window immediately; the set continues in the
+  background and failures surface through the notifications app's
+  `wallpaper.state` error card (never by reopening the selector).
 - The runtime's AGS reloader skips this instance (`DEFAULT_SKIP_CONFIG_DIRS`,
   same as the editor): a restart would pop the visible-on-start window back
   open uninvited. Palette restyling arrives event-driven instead — the

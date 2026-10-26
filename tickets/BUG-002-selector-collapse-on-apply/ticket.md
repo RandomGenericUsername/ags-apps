@@ -2,7 +2,7 @@
 id: BUG-002
 title: "Apply click must collapse the wallpaper selector immediately"
 kind: bug
-status: triage
+status: in-progress
 lane: 2
 severity: medium
 links:
