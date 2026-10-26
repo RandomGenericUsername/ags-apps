@@ -23,6 +23,7 @@
 ## Bugs
 
 - [BUG-001-wallpicker-grayscale-thumbs/ticket.md](./BUG-001-wallpicker-grayscale-thumbs/ticket.md) — grayscale thumbnails for PNG wallpapers (RGBA — gdk-pixbuf JPEG saver bug) | severity: high | `done` | links: worktree .worktrees/BUG-001, branch ticket/BUG-001-grayscale-thumbs
+- [BUG-002-selector-collapse-on-apply/ticket.md](./BUG-002-selector-collapse-on-apply/ticket.md) — Apply click must collapse the wallpaper selector immediately | severity: medium | `triage` | links: worktree .worktrees/BUG-002/, branch ticket/BUG-002-selector-collapse-on-apply
 
 ## Ops tasks
 
