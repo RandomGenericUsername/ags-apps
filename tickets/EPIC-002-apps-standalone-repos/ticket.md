@@ -2,7 +2,7 @@
 id: EPIC-002
 title: "AGS apps as standalone repos with one palette-refresh contract"
 kind: epic
-status: proposed
+status: in-progress
 lane: bmad-advisory
 links:
   openspec: none

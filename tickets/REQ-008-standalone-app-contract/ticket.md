@@ -2,13 +2,13 @@
 id: REQ-008
 title: "Standalone app contract, manifest schema, repo template and cutover recipe"
 kind: requirement
-status: proposed
+status: in-progress
 lane: 4
 links:
   openspec: none
   bmad: none
-worktree: none
-branch: none
+worktree: .worktrees/REQ-008/
+branch: ticket/REQ-008-standalone-app-contract
 ---
 
 # Standalone app contract, manifest schema, repo template and cutover recipe
