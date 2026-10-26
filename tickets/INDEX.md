@@ -15,6 +15,17 @@
   - [REQ-005-migrate-wallpaper-selector/ticket.md](./REQ-005-migrate-wallpaper-selector/ticket.md) — Migrate wallpaper-selector | `done` | openspec: migrate-wallpaper-selector
   - [REQ-006-migrate-icme/ticket.md](./REQ-006-migrate-icme/ticket.md) — Migrate icme | `done` | openspec: migrate-icme
   - [REQ-007-migrate-btop-theme-studio/ticket.md](./REQ-007-migrate-btop-theme-studio/ticket.md) — Migrate btop-theme-studio | `done` | links: none
+- [EPIC-002-apps-standalone-repos/ticket.md](./EPIC-002-apps-standalone-repos/ticket.md) — AGS apps as standalone repos with one palette-refresh contract | `proposed` | links: none | 0/9 children done
+  - done-when: every migrated AGS app is authored, released and pinned as its own repo; each declares one manifest refresh mode and live apps implement `palette-refresh`; dotfiles consumes each individually; no undeclared restart remains; btop never loses pending edits; docs, tests and deploy coverage match.
+  - [REQ-008-standalone-app-contract/ticket.md](./REQ-008-standalone-app-contract/ticket.md) — Standalone app contract, manifest schema, repo template and cutover recipe | `proposed`
+  - [REQ-009-migrate-hypr-pano-standalone/ticket.md](./REQ-009-migrate-hypr-pano-standalone/ticket.md) — Migrate hypr-pano to a standalone repo with live palette refresh | `proposed`
+  - [REQ-010-migrate-btop-theme-studio-standalone/ticket.md](./REQ-010-migrate-btop-theme-studio-standalone/ticket.md) — Migrate btop-theme-studio to a standalone repo with pending-aware live refresh | `proposed`
+  - [REQ-011-migrate-capture-tool-standalone/ticket.md](./REQ-011-migrate-capture-tool-standalone/ticket.md) — Migrate capture-tool to a standalone repo with a safe palette-refresh policy | `proposed`
+  - [REQ-012-migrate-notifications-standalone/ticket.md](./REQ-012-migrate-notifications-standalone/ticket.md) — Migrate notifications to a standalone repo (already live) | `proposed`
+  - [REQ-013-migrate-wallpaper-selector-standalone/ticket.md](./REQ-013-migrate-wallpaper-selector-standalone/ticket.md) — Migrate wallpaper-selector to a standalone repo (already live) | `proposed`
+  - [REQ-014-migrate-icme-standalone/ticket.md](./REQ-014-migrate-icme-standalone/ticket.md) — Migrate icme to a standalone repo (already live) | `proposed`
+  - [REQ-015-migrate-bar-standalone/ticket.md](./REQ-015-migrate-bar-standalone/ticket.md) — Migrate bar to a standalone repo, last | `proposed`
+  - [REQ-016-final-consumption-cutover/ticket.md](./REQ-016-final-consumption-cutover/ticket.md) — Final dotfiles consumption cutover + ags-apps disposition | `proposed`
 
 ## Requirements
 
