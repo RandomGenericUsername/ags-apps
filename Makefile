@@ -542,13 +542,17 @@ wallpaper-selector-typecheck: ags-platform-dev wallpaper-selector-types
 	rm -f "$$log"
 
 # wallpaper-selector-tests -- the selector's PURE model (grouping, filtering,
-# zero-hash spine mapping, live pinning, contrast helpers). No desktop stack and
-# no platform: model.ts imports nothing, so plain `node` runs the suite on a
-# stock runner (same shape as the bar's audio `.mjs` validation suites).
+# zero-hash spine mapping, live pinning, contrast helpers) plus the BUG-002
+# Apply-click collapse wiring/timing gate. No desktop stack and no platform:
+# model.ts imports nothing and the collapse gate reads the window source, so
+# plain `node` runs the suites on a stock runner (same shape as the bar's audio
+# `.mjs` validation suites).
 wallpaper-selector-tests:
 	@command -v node >/dev/null || { echo "FAIL: wallpaper-selector-tests: node is not on PATH" >&2; exit 1; }
-	@echo "==> wallpaper-selector-tests: node $(WALLPAPER_TESTS)/model.test.mjs"
-	node $(WALLPAPER_TESTS)/model.test.mjs
+	@for suite in model.test apply-collapse.test; do \
+		echo "==> wallpaper-selector-tests: node $(WALLPAPER_TESTS)/$$suite.mjs"; \
+		node $(WALLPAPER_TESTS)/$$suite.mjs || exit 1; \
+	done
 
 # wallpaper-selector-drift-test -- the repointed drift gate. Pins the SHARED
 # platform event client (AD-5) against the canonical contract, exercises its
