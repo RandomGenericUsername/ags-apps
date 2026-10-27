@@ -10,129 +10,146 @@ links:
 worktree: .worktrees/EPIC-002/
 branch: ticket/EPIC-002-apps-standalone-repos
 children: [REQ-008, REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-016]
-done-when: "Every migrated AGS app is authored, released and pinned as its own repo; each app declares its refresh mode in one manifest and implements the palette-refresh command when live; dotfiles consumes each app individually; no undeclared restart remains; btop never loses pending edits; docs, tests and deploy coverage match the new topology."
+done-when: "Every in-scope AGS app is authored, released and pinned as its own repo; every app ships app.manifest.json; manifests and live handlers are adopted before the runtime switch; the runtime discovers manifests and keeps one applied-appearance ledger; live apps answer palette-refresh and restart apps are explicit; one program platform/contracts/assets tuple is deployed; dotfiles consumes one app list with one owner per app; ags-apps is archived at the end; btop never loses pending edits; docs, tests and deploy coverage match."
 ---
 
 # AGS apps as standalone repos with one palette-refresh contract
 
 ## Triage (/triage)
 
-- `kind: epic` — this is a cross-repo migration program, not one bounded feature
-  or bug. It touches new app repos, `ags-platform`, `dotfiles-runtime`,
-  `dotfiles-v3`/`dotfiles-provision` and the per-app cutovers.
-- `lane: 4 — bmad-advisory` — the process boundary, manifest/command response,
-  fallback rules, repo template, versioning and cutover mechanics are
-  architectural decisions that must be designed before app-by-app
-  implementation.
-- Not a spike: the investigation is complete
-  (`tickets/SPIKE-001-ags-refresh-patterns/ticket.md`); this is a program of
-  work, not more questions.
-- Not lane 3: the pieces are not all fully understood yet. The contract,
-  provisioning cutover, and `ags-apps` disposition need advisory design.
-- Ambiguity: command response/ack and timeout, whether restart remains an
-  explicit manifest mode, how each app repo pins `ags-platform`/`contracts`,
-  what `ags-apps` becomes when the apps leave, and whether the bar is migrated
-  or kept as the long-lived exception.
-- Guard: `bash scripts/worktree-guard.sh check-clean` exited 0 before this
-  worktree was created.
+- `kind: epic` — cross-repo migration program: seven app repos plus
+  `contracts`, `ags-platform`, `dotfiles-runtime`, `dotfiles-v3`,
+  `dotfiles-provision` and `dotfiles-assets` (icon-source tuple, launchers and
+  launch lock).
+- `lane: 4 — bmad-advisory` — the process contract, manifest/install-list
+  schemas, runtime ledger, per-app install topology and cutover epoch are
+  architectural decisions. The advisory output is the spine:
+  `_bmad-output/initiative-ags-standalone-apps/architecture-standalone-app-contract/architecture-standalone-app-contract.md`.
+- Not a spike: `SPIKE-001` answered the refresh-pattern question. This is the
+  implementation program; the per-app split is conditional on the REQ-009
+  pilot exit gate.
+- Ambiguity resolved: command + manifest, JSON string ack, parallel live lane,
+  serialized restart lane, one program platform/contracts tuple, no legacy
+  path, one-owner cutover at the composition layer.
+- Guard: `bash scripts/worktree-guard.sh check-clean` exited 0 before the
+  EPIC-002 worktree was created.
 
 ## Goal
 
-Move each AGS app into its own standalone repo, one at a time. Each app
-implements one palette-refresh contract. Dotfiles consumes each migrated app
-through its own pinned repo. The old `ags-apps` unit stops deploying the
-migrated app.
+Move each AGS app into its own standalone repo, one at a time. Every app ships
+one manifest and declares `live` or `restart`. The runtime discovers running
+apps from their deployed manifests, gates on the applied-appearance ledger, and
+invokes live apps or restarts the explicit restart app. Dotfiles consumes a
+single per-app list with exactly one owner per app. `ags-apps` is archived after
+the last app moves.
 
-The deployed config directory and AGS instance name stay identical during a
-cutover, so keybinds, logs, runtime discovery and user configuration do not
-change.
+This is a strangler-fig migration. The current monorepo is re-pinned to the
+program tuple, and every live app gets its manifest **and** `palette-refresh`
+handler before the manifest-driven runtime is enabled. The runtime switch comes
+next, then the per-app repo cutovers. The old `ags-apps` unit shrinks and is
+archived; it is not kept as an empty meta repo.
 
-This is a strangler-fig migration: the old app remains consumed until its new
-repo is tagged, pinned and verified. The cutover commit removes the old owner
-and adds the new one; there must never be two deployments of the same app.
+The clipboard app is renamed end to end: `ags-clipboard` / `clipboard` /
+`ags-clipboard` / `clipboard-window` / `clipboard-ui`, including its data paths
+with a one-time migration from the old `hypr-pano` locations.
 
 ## Contract
 
-Each app ships a small manifest declaring:
+The binding contract is the architecture spine (AD-25 through AD-37). At the
+epic level:
 
-- instance name;
-- deployed config directory;
-- refresh mode: `live` or `restart`;
-- command name, normally `palette-refresh` (required for `live`);
-- whether it holds unsaved state;
-- whether it has a transient user-facing obligation that forbids restart.
-
-Each live app implements the command in its `requestHandler`. The runtime
-discovers running apps, reads the manifest, and either invokes the command or
-restarts. No manifest means legacy restart. An app declaring unsaved state or a
-transient obligation is never restarted; a failed refresh is reported instead.
-
-`restart` is allowed only as an explicit, change-gated fallback. It is not the
-default once an app has a manifest. The long-term direction is live refresh for
-every app that can prove its invalidation path.
+- `app.manifest.json` is the app's declaration: identity, `mode: live|restart`,
+  and `holdsUnsavedState`.
+- The runtime is the only palette-refresh trigger. It invokes
+  `ags request palette-refresh <appearance-hash> -i <instance>` for live apps and
+  uses the safe serialized procedure for restart apps.
+- Live refresh is parallel, state-preserving, JSON-string acknowledged, 5 s
+  timeout, runtime-owned structured logs.
+- One applied-appearance ledger and one operation lock prevent no-op refreshes,
+  double triggers, and permanently skipped failures.
+- One program `ags-platform`/`contracts`/`dotfiles-assets` tuple per install.
+  App repos pin that tuple for CI; the deployed shared ancestor is single-valued.
+  The current monorepo is re-pinned to it during adoption.
+- `dotfiles-v3` owns one app list (`owner: legacy|standalone`). The old role
+  filters `legacy`, the new role filters `standalone`; flipping one entry is the
+  cutover transaction. Ownership covers source, links, launcher, autostart,
+  processes and D-Bus names.
+- Installed tags are immutable; writable state lives outside them; `colors.css`
+  and `icons.json` have one producer each.
 
 ## Migration order
 
-1. Contract, manifest schema, repo template and cutover recipe.
-2. `hypr-pano` — pilot: prove the repo split + command contract with low
-   unsaved-state risk.
-3. `btop-theme-studio` — the data-loss case; pending-edit semantics.
-4. `capture-tool` — choose live icon/window refresh or an explicit, deferred
-   restart; no unconditional restart.
-5. `notifications` — already live; packaging cutover.
-6. `wallpaper-selector` — already live; packaging cutover.
-7. `icme` — already live; packaging cutover.
-8. `bar` — last; session-critical; live-vs-restart decision at that child.
-9. Final consumption cutover and `ags-apps` disposition.
+1. Contract, manifest/install-list schemas, repo template, runtime ledger, and
+   cutover fixture.
+2. Re-pin the current monorepo to the program tuple; adopt manifests and live
+   `palette-refresh` handlers in the current deployment. The bar gets its
+   manifest and remains `restart` with no handler; enable the manifest-driven
+   runtime after adoption.
+3. `ags-clipboard` — pilot and exit-gate proof: full rename + live refresh.
+4. `btop-theme-studio` — pending-aware live refresh.
+5. `capture-tool` — live refresh.
+6. `notifications` — already live; packaging cutover.
+7. `wallpaper-selector` — already live; packaging cutover.
+8. `icme` — already live; packaging cutover.
+9. `bar` — last; explicit `restart` app.
+10. Final cutover: delete the old role/pin, archive `ags-apps`.
 
 ## Done-when
 
 Expanded from the frontmatter:
 
-- every in-scope app is authored in its own repo, tagged, and consumed by
-  dotfiles through an individual pin;
-- every app ships the manifest and declares `live` or `restart`; every `live`
-  app implements `palette-refresh`;
-- the runtime no longer hardcodes the app list for refresh policy; it reads the
-  deployed manifest and honors `unsaved`/`transient` no-restart rules;
-- the old `ags-apps` unit no longer deploys any migrated app, and there is no
-  duplicate config dir or duplicate AGS instance;
-- `btop-theme-studio` never loses pending edits on a wallpaper change;
-- no app is restarted on a no-op reconcile, and no app with unsaved or
-  transient state is restarted;
-- tests, typechecks, bundle checks, deploy coverage and docs match the new
-  topology;
-- the `ags-apps` disposition (coordination/meta repo or archive) is recorded.
+- every in-scope app is authored, released and pinned in its own repo;
+- every app ships a valid manifest; manifests and live handlers are adopted
+  before the runtime switch; no legacy runtime path exists;
+- the runtime discovers manifests and enforces identity; it has one
+  applied-appearance ledger and one operation lock;
+- live apps implement `palette-refresh`, preserve declared state, and ack with
+  a JSON string; restart is explicit and only the bar uses it;
+- one program platform/contracts/assets tuple is installed and every app repo
+  passes conformance against it;
+- `dotfiles-v3` has one app list with one owner per app; the old role only
+  shrinks; the final state has no `ags-apps` pin;
+- the clipboard rename is complete, including data migration;
+- installed tags are immutable and user state survives a tag bump;
+- `btop-theme-studio` never loses pending edits; no no-op reconcile refreshes
+  or restarts anything;
+- tests, typechecks, bundle checks, deploy coverage, template conformance and
+  docs match the new topology.
 
 ## Children
 
-- [ ] `REQ-008` — Standalone app contract, manifest schema, repo template and cutover recipe (`proposed`)
-- [ ] `REQ-009` — Migrate `hypr-pano` to a standalone repo + live refresh (`proposed`)
-- [ ] `REQ-010` — Migrate `btop-theme-studio` to a standalone repo + pending-aware live refresh (`proposed`)
-- [ ] `REQ-011` — Migrate `capture-tool` to a standalone repo + safe refresh policy (`proposed`)
-- [ ] `REQ-012` — Migrate `notifications` to a standalone repo (already live) (`proposed`)
-- [ ] `REQ-013` — Migrate `wallpaper-selector` to a standalone repo (already live) (`proposed`)
-- [ ] `REQ-014` — Migrate `icme` to a standalone repo (already live) (`proposed`)
-- [ ] `REQ-015` — Migrate `bar` to a standalone repo, last (`proposed`)
-- [ ] `REQ-016` — Final dotfiles consumption cutover + `ags-apps` disposition (`proposed`)
+- [ ] `REQ-008` — Standalone app contract, manifests, runtime ledger, repo template and cutover fixture (`in-progress`)
+- [ ] `REQ-009` — Migrate `ags-clipboard` with full rename + live refresh (pilot) (`proposed`)
+- [ ] `REQ-010` — Migrate `btop-theme-studio` with pending-aware live refresh (`proposed`)
+- [ ] `REQ-011` — Migrate `capture-tool` with live refresh (`proposed`)
+- [ ] `REQ-012` — Migrate `notifications` (already live) (`proposed`)
+- [ ] `REQ-013` — Migrate `wallpaper-selector` (already live) (`proposed`)
+- [ ] `REQ-014` — Migrate `icme` (already live) (`proposed`)
+- [ ] `REQ-015` — Migrate `bar` last as the explicit restart app (`proposed`)
+- [ ] `REQ-016` — Final dotfiles cutover + archive `ags-apps` (`proposed`)
 
 ## External dependencies
 
-- `dotfiles-runtime`: immediate btop skip-list safety bug.
-- `dotfiles-runtime`: manifest discovery + `palette-refresh` invocation and
-  fallback.
-- `ags-platform`: one-provider palette replacement contract; required before
-  new live consumers.
-- `dotfiles-v3` / `dotfiles-provision`: per-app pins and roles, no duplicate
-  deployment during cutover.
-- New app repos: AGENTS, ticket flow, CI, typecheck, release and pin docs.
+- `contracts`: manifest schema, install-list schema, `palette-refresh` +
+  result/log protocol, `wallpaper.state` note.
+- `ags-platform`: manifest helper/types; Theme one-provider replacement
+  (blocking before live refresh).
+- `dotfiles-assets`: program tuple icon-source tag; clipboard launch/keybind
+  rename; shared launch-lock wrapper.
+- `dotfiles-runtime`: manifest discovery/identity, applied-appearance ledger,
+  operation lock, parallel live lane, serialized restart lane, logs, clipboard
+  daemon rename/data migration, bar restart fix.
+- `dotfiles-v3`: one app list, pins, deploy coverage, cutover gate.
+- `dotfiles-provision`: generic install loop, owner filters, verify, quiesce/
+  stop/start link swap, launcher/autostart consumption, tag immutability,
+  shared launch lock.
+- New app repos: AGENTS/tickets/worktree guard/Makefile/CI/template
+  conformance.
 
 ## Open decisions
 
-- Command + manifest vs event broadcast. The user selected command + manifest;
-  the child contract must define the response, timeout and fallback.
-- Whether `restart` remains a permanent manifest mode or is only a migration
-  fallback.
-- Versioning: each app repo pins `ags-platform`/`contracts` independently.
-- What remains of `ags-apps`: coordination/meta repo, or archive.
-- Whether the bar is migrated or kept in `ags-apps` after the program.
+- The REQ-009 pilot exit-gate result: if it fails, the program stops.
+- Exact `ags-platform`/`contracts`/`dotfiles-assets` program tuple tags at
+  REQ-008 release.
+- `ags-apps` archive vs deletion at REQ-016.
+- Bar live refresh is a future iteration; restart is the current explicit mode.

@@ -1,6 +1,6 @@
 ---
 id: REQ-012
-title: "Migrate notifications to a standalone repo (already live)"
+title: "Migrate notifications to ags-notifications (already live)"
 kind: requirement
 status: proposed
 lane: 3
@@ -11,41 +11,39 @@ worktree: none
 branch: none
 ---
 
-# Migrate notifications to a standalone repo (already live)
+# Migrate notifications to ags-notifications (already live)
 
 ## Requirement
 
-Move `notifications` into its own standalone repo with the manifest +
-`palette-refresh` contract. Keep the deployed config directory
-`ags-notifications` and the AGS instance name `notifications` unchanged.
+Move `notifications` into `ags-notifications`. Keep the deployed config dir
+`ags-notifications` and instance `notifications`. The manifest declares
+`app: notifications`, `instance: notifications`,
+`configDir: ags-notifications`, `mode: live`, `holdsUnsavedState: false`.
 
-This is primarily a packaging cutover: the app already live-refreshes. The
-manifest declares `refresh: live`, no restart (it owns
-`org.freedesktop.Notifications` and can hold a transient progress card), and
-the command re-applies the palette and reloads the wallpaper-progress icons.
+The command re-applies the palette and reloads the wallpaper-progress icons
+while preserving the progress card and `org.freedesktop.Notifications`
+ownership. `wallpaper.state` remains the progress-card/UI event, not the
+palette-refresh trigger.
 
 ## Acceptance
 
-- [ ] New repo is tagged and has AGENTS, ticket flow, CI, typecheck, tests and a
-      release/pin note.
-- [ ] Deployed config dir is still `ags-notifications`; instance name is still
-      `notifications`.
-- [ ] Manifest declares `refresh: live`, no restart, and the `palette-refresh`
-      command.
+- [ ] Repo is created from the template, tagged, and builds against the program
+      `ags-platform`/`contracts` tuple with template conformance.
+- [ ] Manifest identity is `notifications` / `ags-notifications`, `mode: live`,
+      no unsaved state.
 - [ ] `palette-refresh` preserves the progress card/bus ownership and refreshes
-      the palette + progress icons.
-- [ ] The existing live behavior and trigger semantics are preserved or
-      explicitly documented.
-- [ ] Dotfiles cutover pins the new repo, removes the app from the old
-      `ags-apps` unit, bumps the old unit tag, and passes deploy coverage with
-      no duplicate config dir.
-- [ ] Old in-tree source is deleted; docs record the new pin.
+      palette + progress icons.
+- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+      the old instance, repoints the link, starts the new instance and verifies
+      one owner.
+- [ ] Old source is removed from `ags-apps`; docs record the new pin.
 
 ## Dependencies
 
-- `REQ-008` contract and template.
-- `dotfiles-runtime` manifest/invocation support.
-- `ags-platform` provider replacement before adding more live refreshes.
+- `REQ-008` contract/schemas/template/cutover fixture.
+- `ags-platform` Theme one-provider replacement and manifest helper.
+- `dotfiles-runtime` manifest discovery, ledger, lanes.
+- `dotfiles-v3`/`dotfiles-provision` app list and generic role.
 
 ## Evidence
 

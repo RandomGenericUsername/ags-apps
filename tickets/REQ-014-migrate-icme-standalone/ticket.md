@@ -1,6 +1,6 @@
 ---
 id: REQ-014
-title: "Migrate icme to a standalone repo (already live)"
+title: "Migrate icme to ags-icme (already live)"
 kind: requirement
 status: proposed
 lane: 3
@@ -11,40 +11,38 @@ worktree: none
 branch: none
 ---
 
-# Migrate icme to a standalone repo (already live)
+# Migrate icme to ags-icme (already live)
 
 ## Requirement
 
-Move `icme` (the icon-color mapping editor) into its own standalone repo with
-the manifest + `palette-refresh` contract. Keep the deployed config directory
-`ags-icme` and the AGS instance name `icon-color-mapping-editor` unchanged.
+Move `icme` into `ags-icme`. Keep the deployed config dir `ags-icme` and
+instance `icon-color-mapping-editor`. The manifest declares `app: icme`,
+`instance: icon-color-mapping-editor`, `configDir: ags-icme`, `mode: live`,
+`holdsUnsavedState: true`.
 
-This is primarily a packaging cutover: the app already live-refreshes and holds
-unsaved edits. The manifest declares `refresh: live`, `holdsUnsavedState: true`,
-and no restart. The command re-applies the palette and rebuilds the show only
-when the scheme fingerprint moved, preserving all pending/staging maps.
+The command re-applies the palette and rebuilds the show only when the scheme
+fingerprint moved, preserving all pending/staging maps. The app must never be
+restarted.
 
 ## Acceptance
 
-- [ ] New repo is tagged and has AGENTS, ticket flow, CI, typecheck, tests and a
-      release/pin note.
-- [ ] Deployed config dir is still `ags-icme`; instance name is still
-      `icon-color-mapping-editor`.
-- [ ] Manifest declares `refresh: live`, `holdsUnsavedState: true`, and the
-      `palette-refresh` command.
+- [ ] Repo is created from the template, tagged, and builds against the program
+      `ags-platform`/`contracts` tuple with template conformance.
+- [ ] Manifest identity is `icme` / `icon-color-mapping-editor` / `ags-icme`,
+      `mode: live`, unsaved state true.
 - [ ] `palette-refresh` preserves pending edits and only rebuilds the show when
       the scheme fingerprint changes.
-- [ ] Existing live behavior and pending-edit protection are preserved.
-- [ ] Dotfiles cutover pins the new repo, removes the app from the old
-      `ags-apps` unit, bumps the old unit tag, and passes deploy coverage with
-      no duplicate config dir.
-- [ ] Old in-tree source is deleted; docs record the new pin.
+- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+      the old instance, repoints the link, starts the new instance and verifies
+      one owner.
+- [ ] Old source is removed from `ags-apps`; docs record the new pin.
 
 ## Dependencies
 
-- `REQ-008` contract and template.
-- `dotfiles-runtime` manifest/invocation support.
-- `ags-platform` provider replacement before adding more live refreshes.
+- `REQ-008` contract/schemas/template/cutover fixture.
+- `ags-platform` Theme one-provider replacement and manifest helper.
+- `dotfiles-runtime` manifest discovery, ledger, lanes.
+- `dotfiles-v3`/`dotfiles-provision` app list and generic role.
 
 ## Evidence
 

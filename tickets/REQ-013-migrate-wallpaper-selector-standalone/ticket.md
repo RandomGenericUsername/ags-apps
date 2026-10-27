@@ -1,6 +1,6 @@
 ---
 id: REQ-013
-title: "Migrate wallpaper-selector to a standalone repo (already live)"
+title: "Migrate wallpaper-selector to ags-wallpaper-selector (already live)"
 kind: requirement
 status: proposed
 lane: 3
@@ -11,41 +11,37 @@ worktree: none
 branch: none
 ---
 
-# Migrate wallpaper-selector to a standalone repo (already live)
+# Migrate wallpaper-selector to ags-wallpaper-selector (already live)
 
 ## Requirement
 
-Move `wallpaper-selector` into its own standalone repo with the manifest +
-`palette-refresh` contract. Keep the deployed config directory
-`ags-wallpaper-selector` and the AGS instance name `wallpaper-selector`
-unchanged.
+Move `wallpaper-selector` into `ags-wallpaper-selector`. Keep the deployed config
+dir `ags-wallpaper-selector` and instance `wallpaper-selector`. The manifest
+declares `app: wallpaper-selector`, `instance: wallpaper-selector`,
+`configDir: ags-wallpaper-selector`, `mode: live`, `holdsUnsavedState: false`.
 
-This is primarily a packaging cutover: the app already live-refreshes. The
-manifest declares `refresh: live`, no restart (restarting would reopen the
-on-demand drawer), and the command re-applies the palette, rebuilds the search
-icon and rescans the wallpaper model.
+The command re-applies the palette, rebuilds the search icon and rescans the
+wallpaper model while preserving the drawer state. There is no restart.
 
 ## Acceptance
 
-- [ ] New repo is tagged and has AGENTS, ticket flow, CI, typecheck, tests and a
-      release/pin note.
-- [ ] Deployed config dir is still `ags-wallpaper-selector`; instance name is
-      still `wallpaper-selector`.
-- [ ] Manifest declares `refresh: live`, no restart, and the `palette-refresh`
-      command.
-- [ ] `palette-refresh` preserves the drawer state and refreshes palette,
-      search icon and model.
-- [ ] Existing live behavior and BUG-002 click-collapse behavior are preserved.
-- [ ] Dotfiles cutover pins the new repo, removes the app from the old
-      `ags-apps` unit, bumps the old unit tag, and passes deploy coverage with
-      no duplicate config dir.
-- [ ] Old in-tree source is deleted; docs record the new pin.
+- [ ] Repo is created from the template, tagged, and builds against the program
+      `ags-platform`/`contracts` tuple with template conformance.
+- [ ] Manifest identity is `wallpaper-selector` / `ags-wallpaper-selector`,
+      `mode: live`, no unsaved state.
+- [ ] `palette-refresh` preserves the drawer and refreshes palette/search
+      icon/model.
+- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+      the old instance, repoints the link, starts the new instance and verifies
+      one owner.
+- [ ] Old source is removed from `ags-apps`; docs record the new pin.
 
 ## Dependencies
 
-- `REQ-008` contract and template.
-- `dotfiles-runtime` manifest/invocation support.
-- `ags-platform` provider replacement before adding more live refreshes.
+- `REQ-008` contract/schemas/template/cutover fixture.
+- `ags-platform` Theme one-provider replacement and manifest helper.
+- `dotfiles-runtime` manifest discovery, ledger, lanes.
+- `dotfiles-v3`/`dotfiles-provision` app list and generic role.
 
 ## Evidence
 

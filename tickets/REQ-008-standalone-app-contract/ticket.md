@@ -1,75 +1,115 @@
 ---
 id: REQ-008
-title: "Standalone app contract, manifest schema, repo template and cutover recipe"
+title: "Standalone app contract, manifests, runtime ledger, repo template and cutover fixture"
 kind: requirement
 status: in-progress
 lane: 4
 links:
   openspec: none
-  bmad: none
+  bmad: _bmad-output/initiative-ags-standalone-apps/architecture-standalone-app-contract/architecture-standalone-app-contract.md
 worktree: .worktrees/REQ-008/
 branch: ticket/REQ-008-standalone-app-contract
 ---
 
-# Standalone app contract, manifest schema, repo template and cutover recipe
+# Standalone app contract, manifests, runtime ledger, repo template and cutover fixture
 
 ## Requirement
 
-Define the one process-level contract that lets each AGS app live in its own
-repo, plus the template and cutover recipe used by every app child.
+Turn the REQ-008 architecture spine into the executable contract shared by every
+app repo and every consumer repo. The spine is binding; this ticket delivers the
+schemas, fixtures and prerequisites that let the app-by-app cutovers begin.
 
-The contract must cover:
+Deliver:
 
-- a deployed app manifest with instance name, config directory, refresh mode
-  (`live`/`restart`), command name, unsaved-state flag and transient-obligation
-  flag;
-- a `palette-refresh` command implemented by live apps in their
-  `requestHandler`, with a defined response, timeout, failure and idempotency
-  semantics;
-- runtime discovery and invocation: no manifest means legacy restart; `live`
-  invokes the command; `restart` is explicit and change-gated; unsaved or
-  transient apps are never restarted;
-- the app repo template: `AGENTS.md`, ticket flow, CI, typecheck, release tag,
-  pin documentation and app-directory layout;
-- the per-app cutover recipe: same config dir and instance name, add the new
-  pin/role, remove the app from the old `ags-apps` unit, bump the old unit tag,
-  deploy-coverage check, no duplicate deployment;
-- the versioning rule for `ags-platform` and `contracts` consumed by each app
-  repo.
+- `contracts`: `app.manifest.json` schema, the `dotfiles-v3` app-list schema,
+  the `palette-refresh` request/JSON-string response protocol, and the runtime
+  result/log schema. Update the `wallpaper.state` contract note so it no longer
+  claims to drive live palette refresh.
+- `ags-platform`: TypeScript manifest helper/types and the one-provider Theme
+  replacement helper. The Theme replacement is a hard prerequisite for live
+  refresh.
+- `dotfiles-runtime`: manifest discovery and identity validation
+  (`instance == app.tsx == ags list`, `configDir == link basename`), the
+  applied-appearance ledger, the runtime operation lock, parallel live lane,
+  serialized restart lane, structured logs, and the clipboard daemon data-path
+  migration.
+- `dotfiles-v3` / `dotfiles-provision`: the single app list schema/fixture, the
+  `owner: legacy|standalone` filter in the old/new roles, the generic install
+  loop, the stop/repoint/start link-swap sequence, and a fake-app cutover
+  fixture that proves exactly one owner and both rollback directions.
+- App repo template: AGENTS, tickets/LIFECYCLE/INDEX/_template, worktree guard,
+  Makefile, CI, README, manifest, handler and a template-conformance gate. The
+  pilot repo (`ags-clipboard`) is the reference.
+- Manifest adoption: add `app.manifest.json` to the currently deployed apps,
+  including the bar, before the runtime switch. The runtime switch is a
+  separate release after adoption.
 
-This child is design + prototype. It does not migrate an app.
+This child does not migrate an app repo.
 
 ## Acceptance
 
-- [ ] Manifest schema is written in the canonical contract location and is
-      validated by the runtime and by an app-side helper.
-- [ ] The `palette-refresh` command protocol is specified: argv shape, response
-      format, timeout, error reporting, idempotency and the no-op case.
-- [ ] Runtime behavior is specified and prototyped: manifest discovery, `live`
-      invocation, explicit `restart`, no-manifest legacy, and the no-restart
-      rule for unsaved/transient apps.
-- [ ] The app repo template exists (or is fully specified) with AGENTS, tickets,
-      CI, typecheck, release and pin docs.
-- [ ] The cutover recipe is written and tested on a fake app: same config dir
-      and instance, one owner at a time, old unit pin bumped, no duplicate
-      deployment.
-- [ ] The `ags-platform`/`contracts` versioning and pin policy is recorded.
-- [ ] A GUI-free prototype proves the command round-trip and a failure path
-      without driving the GUI.
-- [ ] The design records whether `restart` remains a permanent manifest mode or
-      is only a migration fallback.
+- [x] The architecture spine is final and linked (`bmad:` above); its AD-25…AD-37
+      are the contract.
+- [ ] `contracts` carries the manifest schema, app-list schema,
+      `palette-refresh` request/response protocol, runtime result/log schema,
+      and the corrected `wallpaper.state` description.
+- [ ] `ags-platform` carries the manifest helper/types and the one-provider
+      Theme replacement; the provider fix is proven before live refresh.
+- [ ] The runtime discovery/identity rule is implemented and tested:
+      every deployed link is enumerated, invalid/missing manifests are
+      structured failures, foreign/dev name owners are conflicts, no
+      wrong-instance refresh, configured restart apps are included when down.
+- [ ] The applied-appearance ledger (`applied|deferred|failed|skipped`), operation
+      lock, parallel live lane, serialized restart lane, shared launch lock and
+      structured logs are implemented and tested.
+- [ ] Live response handling covers applied, deferred and retryable failure; the
+      ledger retries deferred/failed apps on the next trigger.
+- [ ] The clipboard daemon config/state/cache paths have a one-time migration
+      from the old `hypr-pano` paths.
+- [ ] The program tuple is released and pinned in `program-tuple.yaml`:
+      `ags-platform`, `contracts` and `dotfiles-assets`; the record is validated
+      by a schema in `contracts` and consumed by the installer. Every app repo and
+      the current monorepo use it. The current monorepo is re-pinned and released
+      during adoption and keeps its per-unit platform shortcut to the same tuple
+      until removal.
+- [ ] Every currently deployed live app has adopted its manifest **and**
+      `palette-refresh` handler before the runtime switch; the bar has its
+      manifest and remains `restart` with no handler.
+- [ ] `dotfiles-v3` has one app list with a schema, `owner`, `installDir`,
+      identity, spine/XDG/bin links, launcher, autostart, launch policy and
+      palette metadata; `dotfiles-provision` has the generic loop, owner filters,
+      verify mirror, quiesce/stop/start and tag immutability.
+- [ ] A fake-app cutover fixture proves quiesce → owner flip → install/start →
+      verify, rollback, and no duplicate/missing ownership surface.
+- [ ] The template fixture (`templates/ags-app/`), template-conformance gate and
+      pilot exit-gate thresholds are defined; the pilot (`ags-clipboard`) uses
+      the fixture.
+- [ ] No production app repo is cut over by this child.
 
 ## Dependencies
 
 - `SPIKE-001` refresh-pattern findings.
-- User decisions: command + manifest, pano pilot, bar last.
-- External: `dotfiles-runtime` manifest/invocation support; `ags-platform`
-  provider replacement; `dotfiles-v3`/`dotfiles-provision` cutover mechanics.
+- User decisions recorded in the spine/memlog: command + manifest, JSON string
+  ack, parallel live lane, serialized restart lane, one program tuple, no
+  legacy path, clipboard full rename, capture live, bar restart last.
+- External: `contracts`, `ags-platform`, `dotfiles-runtime`,
+  `dotfiles-v3`, `dotfiles-provision`, `dotfiles-assets`.
+
+## Architecture phase evidence
+
+- Spine: `_bmad-output/initiative-ags-standalone-apps/architecture-standalone-app-contract/architecture-standalone-app-contract.md`
+  (`status: final`).
+- Memlog: `.memlog.md` (all coaching decisions, supersessions and reviewer fixes).
+- Mechanical lint: `uv run .agents/skills/bmad-architecture/scripts/lint_spine.py --workspace ...` → `ok: true`, `0` findings.
+- Reviewer gate: rubric, evidence and adversarial passes in `reviews/`; final
+  adversarial re-review `review-adversarial-r4.md` → **PASS**, no new critical/high.
+- The EPIC-002/REQ-009…REQ-016 tickets are aligned to `mode`, manifest adoption,
+  clipboard rename, the applied-appearance ledger, the program tuple and the
+  one-owner cutover epoch.
 
 ## Evidence
 
-- `tickets/SPIKE-001-ags-refresh-patterns/ticket.md` (refresh matrix and
-  contract recommendation).
-- `dotfiles-v3/docs/ags-restart-vs-live-theme-refresh.md` (current documented
-  split).
-- Existing live handlers: notifications, wallpaper-selector, icme.
+- `_bmad-output/initiative-ags-standalone-apps/architecture-standalone-app-contract/architecture-standalone-app-contract.md`
+- `_bmad-output/initiative-ags-standalone-apps/architecture-standalone-app-contract/.memlog.md`
+- `tickets/SPIKE-001-ags-refresh-patterns/ticket.md`
+- Reviewer gate: `reviews/review-{rubric,evidence,adversarial,adversarial-r2,adversarial-r3,adversarial-r4}.md`

@@ -1,6 +1,6 @@
 ---
 id: REQ-010
-title: "Migrate btop-theme-studio to a standalone repo with pending-aware live refresh"
+title: "Migrate btop-theme-studio to ags-btop-theme-studio with pending-aware live refresh"
 kind: requirement
 status: proposed
 lane: 3
@@ -11,63 +11,53 @@ worktree: none
 branch: none
 ---
 
-# Migrate btop-theme-studio to a standalone repo with pending-aware live refresh
+# Migrate btop-theme-studio to ags-btop-theme-studio with pending-aware live refresh
 
 ## Requirement
 
-Move `btop-theme-studio` into its own standalone repo and give it the
-manifest + `palette-refresh` contract. Keep the deployed config directory
-`ags-btop-studio` and the AGS instance name `btop-theme-studio` unchanged.
-
-The app declares `refresh: live` and `holdsUnsavedState: true`. It must never be
-restarted by the runtime, even if a refresh fails.
+Move `btop-theme-studio` into `ags-btop-theme-studio`. Keep the deployed config
+dir `ags-btop-studio` and instance `btop-theme-studio`. The manifest declares
+`app: btop-theme-studio`, `instance: btop-theme-studio`,
+`configDir: ags-btop-studio`, `mode: live`, `holdsUnsavedState: true`.
 
 `palette-refresh` must:
 
 - re-read `current/colors.yaml` and `current/colors.btop.theme`;
-- update the UI palette and the generated theme map;
+- update the UI palette and generated theme map;
 - preserve the in-memory pending-edit map;
-- re-render through the existing reactive `createEffect(renderAll)`;
-- show a visible status when the generated base changed while pending edits
-  exist.
+- re-render through `createEffect(renderAll)`;
+- show a visible status when the generated base changed while pending exists.
 
-The exact pending policy (full refresh with a status, or chrome-only plus a
-stale marker) is an explicit decision in this child. The default is to preserve
-pending edits and never discard them.
-
-The immediate runtime skip-list safety fix is a separate `dotfiles-runtime`
-bug and is a prerequisite for this child's cutover.
+The app must never be restarted, even if a live refresh fails. The btop skip
+safety fix is already in `dotfiles-runtime` v0.2.2; this child proves the
+manifest contract and the live path.
 
 ## Acceptance
 
-- [ ] The runtime skip-list bug for `ags-btop-studio` is fixed and tested before
-      this child claims safety.
-- [ ] New repo is tagged and has AGENTS, ticket flow, CI, typecheck, pure tests
-      and a release/pin note.
-- [ ] Deployed config dir is still `ags-btop-studio`; instance name is still
-      `btop-theme-studio`.
-- [ ] Manifest declares `refresh: live`, `holdsUnsavedState: true`, and the
-      `palette-refresh` command.
-- [ ] `palette-refresh` re-reads both palette files, updates palette + generated
-      theme, preserves pending, re-renders and reports the pending/stale state.
-- [ ] Regression tests prove pending edits survive a refresh and the app is
-      never restarted.
-- [ ] Dotfiles cutover pins the new repo, removes the app from the old
-      `ags-apps` unit, bumps the old unit tag, and passes deploy coverage with
-      no duplicate config dir.
-- [ ] Old in-tree source is deleted; docs record the new pin and pending policy.
+- [ ] Repo is created from the template, tagged, and builds against the program
+      `ags-platform`/`contracts` tuple with template conformance.
+- [ ] Manifest identity is `btop-theme-studio` / `ags-btop-studio`, `mode: live`,
+      `holdsUnsavedState: true`.
+- [ ] `palette-refresh` re-reads both files, updates palette + generated theme,
+      preserves pending, re-renders, and reports pending/stale status.
+- [ ] Regression tests prove pending survives and the app is never restarted.
+- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+      the old instance, repoints the link, starts the new instance and verifies
+      one owner.
+- [ ] Old source is removed from `ags-apps`; docs record the new pin and the
+      pending policy.
 
 ## Dependencies
 
-- `REQ-008` contract and template.
-- `dotfiles-runtime`: skips `ags-btop-studio`; manifest/invocation support.
-- `ags-platform` provider replacement before live chrome refresh.
-- Immediate btop skip-list bug (separate ticket).
+- `REQ-008` contract/schemas/template/cutover fixture.
+- `ags-platform` Theme one-provider replacement and manifest helper.
+- `dotfiles-runtime` manifest discovery, ledger, lanes.
+- `dotfiles-v3`/`dotfiles-provision` app list and generic role.
 
 ## Evidence
 
-- `btop-theme-studio/ui/StudioWindow.tsx` palette/generated-map loads, pending
-  map, save path and reactive render.
+- `btop-theme-studio/ui/StudioWindow.tsx` palette/generated loads, pending map,
+  save path and reactive render.
 - `btop-theme-studio/app.tsx` startup-only theme apply.
-- `btop-theme-studio/README.md` thin-consumer and no-contract-topic note.
+- `btop-theme-studio/README.md` thin-consumer note.
 - `tickets/SPIKE-001-ags-refresh-patterns/ticket.md` btop gap.
