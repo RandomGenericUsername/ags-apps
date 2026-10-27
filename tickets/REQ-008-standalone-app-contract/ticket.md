@@ -107,6 +107,20 @@ This child does not migrate an app repo.
   clipboard rename, the applied-appearance ledger, the program tuple and the
   one-owner cutover epoch.
 
+## Workstream tickets
+
+- `contracts` **REQ-009** — manifest/install-list/program-tuple/result schemas +
+  `palette-refresh` protocol.
+- `ags-platform` **REQ-012** + **BUG-001** — manifest helper/types + Theme
+  one-provider fix.
+- `dotfiles-runtime` **REQ-002** + **BUG-006** — manifest driver/ledger/lanes +
+  restart liveness.
+- `dotfiles-v3` OpenSpec **ags-apps-per-repo-consumption** — app list, program
+  tuple, deploy coverage, cutover epoch.
+- `dotfiles-provision` **REQ-008** — generic install topology + verify.
+- `dotfiles-assets` **REQ-007** — clipboard launch/autostart rename.
+- `ags-apps` **REQ-009…REQ-016** — app extraction children and pilot.
+
 ## Evidence
 
 - `_bmad-output/initiative-ags-standalone-apps/architecture-standalone-app-contract/architecture-standalone-app-contract.md`

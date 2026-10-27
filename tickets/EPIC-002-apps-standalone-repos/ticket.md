@@ -130,18 +130,19 @@ Expanded from the frontmatter:
 
 ## External dependencies
 
-- `contracts`: manifest schema, install-list schema, `palette-refresh` +
-  result/log protocol, `wallpaper.state` note.
-- `ags-platform`: manifest helper/types; Theme one-provider replacement
-  (blocking before live refresh).
-- `dotfiles-assets`: program tuple icon-source tag; clipboard launch/keybind
-  rename; shared launch-lock wrapper.
-- `dotfiles-runtime`: manifest discovery/identity, applied-appearance ledger,
-  operation lock, parallel live lane, serialized restart lane, logs, clipboard
-  daemon rename/data migration, bar restart fix.
-- `dotfiles-v3`: one app list, pins, deploy coverage, cutover gate.
-- `dotfiles-provision`: generic install loop, owner filters, verify, quiesce/
-  stop/start link swap, launcher/autostart consumption, tag immutability,
+- `contracts` **REQ-009**: manifest/install-list/program-tuple/result schemas +
+  `palette-refresh` protocol + `wallpaper.state` note.
+- `ags-platform` **REQ-012** + **BUG-001**: manifest helper/types; Theme
+  one-provider replacement (blocking before live refresh).
+- `dotfiles-assets` **REQ-007**: clipboard autostart/keybind rename; shared
+  launch-lock wrapper input; icon-source tuple.
+- `dotfiles-runtime` **REQ-002** + **BUG-006**: manifest discovery/identity,
+  applied-appearance ledger, operation lock, parallel live lane, serialized
+  restart lane, logs, clipboard daemon rename/data migration, bar restart fix.
+- `dotfiles-v3` OpenSpec **ags-apps-per-repo-consumption**: one app list, program
+  tuple, deploy coverage, cutover gate.
+- `dotfiles-provision` **REQ-008**: generic install loop, owner filters, verify,
+  quiesce/stop/start link swap, launcher/autostart consumption, tag immutability,
   shared launch lock.
 - New app repos: AGENTS/tickets/worktree guard/Makefile/CI/template
   conformance.
