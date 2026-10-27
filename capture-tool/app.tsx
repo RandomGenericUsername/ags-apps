@@ -5,6 +5,7 @@ import style from "./style.css"
 // artifact is applied — the stable `colors.css` pointer, repointed on every
 // palette change — so this app no longer carries its own `app.apply_css` call.
 import { theme } from "ags-platform/adapters/theme"
+import { createPaletteRefreshHandler } from "ags-platform/ports/palette-refresh"
 import { execBackendProbe } from "./adapters/exec-backend-probe"
 import { execCaptureLauncher } from "./adapters/exec-capture-launcher"
 import { glibSettingsStore } from "./adapters/glib-settings-store"
@@ -44,6 +45,14 @@ function buildPorts(): CapturePorts {
 app.start({
   instanceName: "capture",
   css: style,
+  // No legacy request surface existed here; the handler is the app's entry
+  // point for the runtime-owned palette refresh (AD-27). It only re-applies the
+  // Theme port: the active capture surface, its shared UI state and the
+  // per-monitor window set are never rebuilt or hidden by a refresh.
+  requestHandler: createPaletteRefreshHandler(() => {
+    theme.apply()
+    return { status: "applied" }
+  }),
   main() {
     try {
       theme.apply()

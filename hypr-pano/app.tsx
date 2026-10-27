@@ -2,8 +2,21 @@ import app from "ags/gtk4/app"
 import Gtk from "gi://Gtk?version=4.0"
 import style from "./style.css"
 import { theme } from "ags-platform/adapters/theme"
+import {
+  PALETTE_REFRESH_COMMAND,
+  createPaletteRefreshHandler,
+} from "ags-platform/ports/palette-refresh"
 import { PanoWindow, hideWindow, showWindow, toggleWindow } from "./ui/PanoWindow"
 import { handleRequest } from "./lib/requests"
+
+// The runtime-owned palette refresh (AD-27), composed with the overlay's
+// existing show/hide/toggle request surface below. It re-applies the stable
+// Theme pointer only: the mapped overlay, query, selection and clipboard
+// history stay exactly as they are.
+const paletteRefresh = createPaletteRefreshHandler(() => {
+  theme.apply()
+  return { status: "applied" }
+})
 
 /**
  * Register one top-level window with the application.
@@ -30,7 +43,15 @@ app.start({
   //      name) -- without a handler that logs `instance "hypr-pano" has no
   //      request handler implemented` and strands the overlay.
   // `toggle` mirrors the `ags toggle` window command so either spelling works.
-  requestHandler(argv: string[], res: (response: unknown) => void) {
+  requestHandler(argv: string[], res: (response: string) => void) {
+    // One `requestHandler` (AGS exposes a single slot): dispatch the fixed
+    // palette command to the platform helper, everything else to the overlay's
+    // existing controls. `palette-refresh` never falls through to a
+    // show/hide/toggle.
+    if (argv[0] === PALETTE_REFRESH_COMMAND) {
+      paletteRefresh(argv, res)
+      return
+    }
     handleRequest(argv, res, {
       show: showWindow,
       hide: hideWindow,

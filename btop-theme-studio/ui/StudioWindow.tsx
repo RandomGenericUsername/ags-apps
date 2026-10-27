@@ -114,6 +114,18 @@ function initialLibrary(): Theme[] {
 
 // ── the window ──────────────────────────────────────────────────────────────
 
+/**
+ * Studio palette refresher, registered by the one studio window and called from
+ * the app-level `palette-refresh` handler. It reloads the runtime palette and
+ * the generated base map only; pending edits, the selected theme, the picker
+ * scope and the active save target stay exactly as they are.
+ */
+let refreshPalette: (() => void) | null = null;
+
+export function refreshStudioPalette(): void {
+  refreshPalette?.();
+}
+
 export function StudioWindow(gdkmonitor: Gdk.Monitor) {
   const [confText] = createState(loadConfText());
   const [palette, setPalette] = createState<Palette>(loadPalette());
@@ -132,6 +144,18 @@ export function StudioWindow(gdkmonitor: Gdk.Monitor) {
   const conf = () => parseBtopConf(confText());
   const current = () => themes().find((t) => t.id === currentId()) ?? themes()[0];
   const effective = () => effectiveMap(current().map, pending());
+
+  function reloadPaletteForRefresh(): void {
+    setPalette(loadPalette());
+    const generatedMap = loadGeneratedMap();
+    setThemes(
+      themes().map((theme) =>
+        theme.id === "generated" ? { ...theme, map: generatedMap } : theme,
+      ),
+    );
+  }
+
+  refreshPalette = reloadPaletteForRefresh;
 
   // ── library actions ──────────────────────────────────────────────────────
   function addTheme(theme: Theme): void {

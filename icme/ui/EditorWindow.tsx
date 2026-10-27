@@ -2,9 +2,7 @@ import { Astal, Gdk, Gtk } from "ags/gtk4";
 import app from "ags/gtk4/app";
 import GLib from "gi://GLib?version=2.0";
 import { createEffect, createState } from "ags";
-// Theming through the platform Theme port (spine AD-13): the app-local
-// `lib/theme.ts` copy is gone.
-import { theme } from "ags-platform/adapters/theme";
+import type { PaletteRefreshResult } from "ags-platform/ports/palette-refresh";
 import {
   manifestRegister,
   mappingSet,
@@ -21,18 +19,10 @@ import {
   type EditorInputs,
 } from "../lib/inputs";
 // The ONE shared event client (spine AD-5): the app-local `lib/event-bus*.ts`
-// copies are gone. `wallpaper.state` keeps the editor's chrome in sync without
-// a restart; `icme.saved` is published through the generated binding.
-import {
-  domainEvents,
-  type DomainPayload,
-} from "ags-platform/adapters/event-bus";
+// copies are gone. The editor publishes `icme.saved` through the generated
+// binding; palette changes arrive through the runtime `palette-refresh`
+// command, not `wallpaper.state` (AD-27).
 import { publishIcmeSaved } from "../lib/icme-saved-gio";
-
-//: The topic this editor consumes. The platform client is generic over topics
-//: (only the bar-owned indicators get constants), so the one topic is named
-//: here; `tests/event-contract-drift.mjs` pins it to the canonical contract.
-const WALLPAPER_STATE_TOPIC = "wallpaper.state" as const;
 import type {
   PendingEdit,
   Scope,
@@ -53,6 +43,17 @@ import { TokenPicker } from "./TokenPicker";
 // Shell window hosting the editor. Owns session state, pending edits, and the
 // save pipeline. One centered overlay window on the given monitor (same
 // layer-shell pattern as the capture dialog).
+/**
+ * Editor palette refresher, registered by the one editor window and called
+ * from the app-level `palette-refresh` handler. It never clears the staging
+ * maps, so pending edits and the current selection survive a refresh.
+ */
+let refreshPalette: (() => Promise<PaletteRefreshResult>) | null = null;
+
+export function refreshEditorPalette(): Promise<PaletteRefreshResult> {
+  return refreshPalette?.() ?? Promise.resolve({ status: "applied" });
+}
+
 export function EditorWindow(gdkmonitor: Gdk.Monitor) {
   const [show, setShow] = createState<MappingShow | null>(null);
   const [loadError, setLoadError] = createState<string | null>(null);
@@ -170,49 +171,29 @@ export function EditorWindow(gdkmonitor: Gdk.Monitor) {
   // toggle. The window's `map` handler (below) re-checks the scheme
   // fingerprint on each show and rebuilds the show when it moved — no
   // background polling. Pending edits are preserved (refreshShow only
-  // swaps the loaded show, never the staging maps).
+  // swaps the loaded show, never the staging maps). The runtime
+  // `palette-refresh` command uses the same refreshShow path below.
 
-  // Live palette refresh (event-driven, no restart). The runtime skips this
-  // instance on purpose (`ags-icme` is in AgsReloader.DEFAULT_SKIP_CONFIG_DIRS)
-  // so a wallpaper set can never discard unsaved edits. Mirror the wallpaper
-  // selector: on `wallpaper.state` done/error, re-apply the generated
-  // stylesheet (the token-bound chrome) and rebuild the show when the scheme
-  // fingerprint moved — without restarting, so pending edits survive.
-  function refreshChrome(): void {
-    try {
-      theme.apply();
-    } catch (error) {
-      console.error(`icme: style refresh failed: ${error}`);
-    }
-  }
-
-  function onWallpaperEvent(payload: DomainPayload): void {
-    const state = payload["state"];
-    if (state !== "done" && state !== "error") return;
-    if (saving() || schemeRefreshing) return;
-    refreshChrome();
+  // Runtime palette refresh (AD-27). The editor no longer follows
+  // `wallpaper.state` for palette; that event is progress/status only. A save
+  // or an in-flight show refresh gets `deferred`/`busy` instead of racing, and
+  // pending edits stay staged because refreshShow never touches the maps.
+  async function refreshEditorPaletteNow(): Promise<PaletteRefreshResult> {
+    if (saving()) return { status: "deferred", reason: "a save is in progress" };
+    if (schemeRefreshing) return { status: "busy" };
     try {
       const fp = schemeFingerprint(inputs().colorScheme);
-      if (fp === schemeFp) return;
+      if (fp === schemeFp) return { status: "applied" };
       schemeFp = fp;
       schemeRefreshing = true;
-      refreshShow()
-        .catch((error: unknown) => setLoadError(String(error)))
-        .finally(() => {
-          schemeRefreshing = false;
-        });
-    } catch {
-      // A failed fingerprint check must never break the editor.
+      await refreshShow();
+      return { status: "applied" };
+    } finally {
+      schemeRefreshing = false;
     }
   }
 
-  try {
-    domainEvents.subscribe(WALLPAPER_STATE_TOPIC, (_topic, payload) =>
-      onWallpaperEvent(payload),
-    );
-  } catch (error) {
-    console.error(`icme: event bus unavailable: ${error}`);
-  }
+  refreshPalette = refreshEditorPaletteNow;
 
   function pick(token: string): void {
     const sel = selection();

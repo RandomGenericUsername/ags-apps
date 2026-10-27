@@ -4,11 +4,13 @@
 // event-client`), the VENDORED generated binding (`lib/generated/contract.ts`)
 // and the app's `icme.saved` publisher against the canonical contract
 // (`contracts/event-contract.json` / `.xml`). It also exercises the shared
-// subscribe-before-read hydration state machine for `wallpaper.state` with a
-// scripted fake transport (no live bus), and asserts the structural facts
-// REQ-006 turns on: the event-bus / event-contract / theme copies are gone and
-// the platform + generated bindings are used. Executed, never text-scanned --
-// except the structural source reads, which are labelled as such.
+// subscribe-before-read hydration state machine with a scripted fake transport
+// (no live bus), and asserts the structural facts REQ-006/AD-27 turn on: the
+// event-bus / event-contract / theme copies are gone, the editor no longer
+// consumes `wallpaper.state` for palette (the runtime `palette-refresh` command
+// owns that), and the platform + generated bindings are used. Executed, never
+// text-scanned -- except the structural source reads, which are labelled as
+// such.
 //
 // Run from the repo root:  make icme-drift-test
 
@@ -152,7 +154,9 @@ check(
   );
 }
 
-// ── The topic the editor consumes (`wallpaper.state`) ────────────────────
+// ── The contract shape the shared client hydrates (`wallpaper.state`) ─────
+// The editor no longer consumes this topic for palette; the gate still pins the
+// canonical payload/enums the shared client parses.
 
 const wallpaper = contractJson.topics["wallpaper.state"];
 check("wallpaper.state is a contract topic", wallpaper !== undefined, true);
@@ -239,23 +243,14 @@ const publisherSource = readFileSync(join(icmeDir, "lib", "icme-saved.ts"), "utf
 const publisherBusSource = readFileSync(join(icmeDir, "lib", "icme-saved-gio.ts"), "utf-8");
 
 check(
-  "window imports the platform event client",
-  /from\s+"ags-platform\/adapters\/event-bus"/.test(windowSource),
-  true,
+  "window no longer subscribes wallpaper.state for palette",
+  windowSource.includes("domainEvents.subscribe") ||
+    windowSource.includes("WALLPAPER_STATE_TOPIC"),
+  false,
 );
 check(
-  "window subscribes wallpaper.state",
-  windowSource.includes("domainEvents.subscribe(WALLPAPER_STATE_TOPIC"),
-  true,
-);
-check(
-  "window's topic constant is the contract topic",
-  windowSource.includes('const WALLPAPER_STATE_TOPIC = "wallpaper.state"'),
-  true,
-);
-check(
-  "window imports the platform Theme port",
-  /from\s+"ags-platform\/adapters\/theme"/.test(windowSource),
+  "app registers the palette-refresh handler",
+  /createPaletteRefreshHandler\(/.test(appSource),
   true,
 );
 check(

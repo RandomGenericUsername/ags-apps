@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "app": "notifications",
+  "instance": "notifications",
+  "configDir": "ags-notifications",
+  "mode": "live",
+  "holdsUnsavedState": false
+}

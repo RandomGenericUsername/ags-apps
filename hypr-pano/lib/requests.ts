@@ -31,7 +31,7 @@ export interface PanoWindowControls {
  */
 export function handleRequest(
   argv: string[],
-  res: (response: unknown) => void,
+  res: (response: string) => void,
   controls: PanoWindowControls,
 ): void {
   const name = argv[0]

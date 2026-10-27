@@ -254,14 +254,24 @@ check(
   true,
 );
 check(
-  "window imports the platform Theme port",
+  "window no longer imports the platform Theme port",
   /from\s+"ags-platform\/adapters\/theme"/.test(windowSource),
-  true,
+  false,
 );
 check(
   "app imports the platform Theme port",
   /from\s+"ags-platform\/adapters\/theme"/.test(appSource),
   true,
+);
+check(
+  "app registers the palette-refresh handler",
+  /createPaletteRefreshHandler\(/.test(appSource),
+  true,
+);
+check(
+  "window does not apply the palette from wallpaper.state",
+  /theme\.apply/.test(windowSource),
+  false,
 );
 check(
   "no app-local event-bus import",

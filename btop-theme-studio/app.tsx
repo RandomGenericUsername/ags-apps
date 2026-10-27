@@ -5,7 +5,8 @@ import style from "./style.css";
 // artifact is applied — the stable `colors.css` pointer, repointed on every
 // palette change — so this app carries no theme.ts and no apply_css call.
 import { theme } from "ags-platform/adapters/theme";
-import { StudioWindow } from "./ui/StudioWindow";
+import { createPaletteRefreshHandler } from "ags-platform/ports/palette-refresh";
+import { StudioWindow, refreshStudioPalette } from "./ui/StudioWindow";
 
 /**
  * Register one top-level window with the application.
@@ -24,6 +25,14 @@ function addWindow(element: JSX.Element): void {
 app.start({
   css: style,
   instanceName: "btop-theme-studio",
+  // Live palette refresh (AD-27), pending-aware: the handler re-applies the
+  // Theme pointer and reloads the generated base/palette, while the studio's
+  // unsaved edits and selected theme stay staged (`holdsUnsavedState: true`).
+  requestHandler: createPaletteRefreshHandler(() => {
+    theme.apply();
+    refreshStudioPalette();
+    return { status: "applied" };
+  }),
   main() {
     // Reuse the desktop palette so the studio matches the bar. The studio's
     // authored btop themes are previewed on purpose-built content surfaces,

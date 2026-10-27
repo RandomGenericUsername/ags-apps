@@ -250,6 +250,16 @@ check(
   /from\s+"\.\.\/lib\/(speedtest|wallpaper)-events"/.test(windowSource),
   false,
 );
+check(
+  "app registers the palette-refresh handler",
+  /createPaletteRefreshHandler\(/.test(appSource),
+  true,
+);
+check(
+  "window does not apply the palette from wallpaper.state",
+  /theme\.apply/.test(windowSource),
+  false,
+);
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);

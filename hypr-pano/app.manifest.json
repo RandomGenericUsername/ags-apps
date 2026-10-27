@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "app": "hypr-pano",
+  "instance": "hypr-pano",
+  "configDir": "ags-hypr-pano",
+  "mode": "live",
+  "holdsUnsavedState": false
+}

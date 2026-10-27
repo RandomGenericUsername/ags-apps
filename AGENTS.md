@@ -16,8 +16,12 @@ Format: any non-trivial claim gets an `Evidence:` line and a `Verify:` line (how
 
 - This repo holds the **AGS application unit**: the status bar plus notifications, capture-tool,
   hypr-pano, wallpaper-selector, the icon-color-mapping editor and the btop theme studio. They are
-  released together as one pinned `ags-apps` tag (`v0.4.1` currently consumed by the installer).
+  released together as one pinned `ags-apps` tag (`v0.4.1` currently consumed by the installer;
+  the standalone-app contract adoption release is `v0.5.0`).
 - Every app **depends on `ags-platform`** (ports + shared adapters) and on `contracts`; **never app → app**.
+- Every app directory carries `app.manifest.json`; every `live` app answers the fixed
+  `palette-refresh` request through the platform helper. The bar is `restart` and has no
+  palette handler. `wallpaper.state` is progress/status only, never a palette trigger.
 - The bar is a thin consumer: capabilities + a default layout. The runtime provides assets and events; the bar renders. Presence is reactive state (`visible`), not a layout edit.
 - Prefer executed output over recalled text. Read files, run commands, paste results.
 

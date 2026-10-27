@@ -5,7 +5,8 @@ import style from "./style.css";
 // artifact is applied — the stable `colors.css` pointer, repointed on every
 // palette change — so this app no longer carries its own theme.ts copy.
 import { theme } from "ags-platform/adapters/theme";
-import { EditorWindow } from "./ui/EditorWindow";
+import { createPaletteRefreshHandler } from "ags-platform/ports/palette-refresh";
+import { EditorWindow, refreshEditorPalette } from "./ui/EditorWindow";
 
 /**
  * Register one top-level window with the application.
@@ -24,6 +25,15 @@ function addWindow(element: JSX.Element): void {
 app.start({
   css: style,
   instanceName: "icon-color-mapping-editor",
+  // Live palette refresh (AD-27) through the runtime command only. The editor
+  // returns `deferred` while a save is in progress; its staged pending edits,
+  // selection and loaded show survive every applied refresh. The Theme pointer
+  // is applied only when the editor actually converges.
+  requestHandler: createPaletteRefreshHandler(async () => {
+    const result = await refreshEditorPalette();
+    if (result.status === "applied") theme.apply();
+    return result;
+  }),
   main() {
     theme.apply();
     // Single centered window on the primary monitor (dev tool, not chrome).

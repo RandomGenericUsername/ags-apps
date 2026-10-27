@@ -8,7 +8,11 @@ import style from "./style.css"
 // artifact is applied — the stable `colors.css` pointer, repointed on every
 // palette change — so this app no longer carries its own theme.ts copy.
 import { theme } from "ags-platform/adapters/theme"
-import { NotificationsWindow } from "./ui/NotificationsWindow"
+import { createPaletteRefreshHandler } from "ags-platform/ports/palette-refresh"
+import {
+  NotificationsWindow,
+  refreshNotificationCardIcons,
+} from "./ui/NotificationsWindow"
 
 //: The well-known bus name this app claims (also used by dunst).
 const NOTIFICATIONS_NAME = "org.freedesktop.Notifications"
@@ -62,6 +66,15 @@ function addWindow(element: JSX.Element): void {
 app.start({
   instanceName: "notifications",
   css: style,
+  // The runtime is the only palette-refresh trigger (AD-27). Re-applying the
+  // stable `colors.css` pointer and re-reading the registry-backed progress
+  // icons preserves the open card stack and the daemon's notification/bus state;
+  // `wallpaper.state` is now progress/status only.
+  requestHandler: createPaletteRefreshHandler(() => {
+    theme.apply()
+    refreshNotificationCardIcons()
+    return { status: "applied" }
+  }),
   main() {
     try {
       theme.apply()

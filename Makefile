@@ -1,4 +1,5 @@
 .PHONY: help typecheck test bar-types ags-platform-dev bar-typecheck ags-test ags-test-deps gates-ci \
+	app-contract-test \
 	hypr-pano-types hypr-pano-typecheck hypr-pano-drift-test \
 	notifications-typecheck notifications-tests notifications-drift-test speedtest-no-new-architecture \
 	capture-tool-types capture-tool-typecheck capture-tool-tests capture-tool-tests-deps \
@@ -29,15 +30,26 @@ AGS_TSCONFIG_TESTS := $(AGS_TESTS)/tsconfig.tests.json
 # gitignored $(AGS_PLATFORM_FETCH_DIR) on demand. Override
 # AGS_PLATFORM_DEV=/path/to/ags-platform to test against a local checkout
 # while iterating on the platform itself.
-AGS_PLATFORM_VERSION := v0.2.0
+#
+# v0.3.0 is the REQ-008 adoption tuple (app-manifest + palette-refresh helpers
+# and the one-provider Theme fix). Its tag is LOCAL-ONLY in this release: put a
+# checkout/symlink at $(AGS_PLATFORM_FETCH_DIR) before running the gates; the
+# fetch branch is for a published tag. .dev/ is gitignored, so a local checkout
+# is never committed.
+AGS_PLATFORM_VERSION := v0.3.0
 AGS_PLATFORM_REPO := https://github.com/RandomGenericUsername/ags-platform.git
 AGS_PLATFORM_DEV ?=
 AGS_PLATFORM_FETCH_DIR := $(CURDIR)/.dev/ags-platform/$(AGS_PLATFORM_VERSION)
 AGS_PLATFORM_SRC := $(if $(AGS_PLATFORM_DEV),$(AGS_PLATFORM_DEV),$(AGS_PLATFORM_FETCH_DIR))
 
+# The contracts reference the adoption release was validated against (AD-34).
+# CI checks out this tag explicitly; the local drift gates read CONTRACTS_ROOT.
+CONTRACTS_VERSION := v0.3.0
+
 help:
 	@echo "bar-typecheck   tsc --noEmit on bar/ (needs the desktop stack)"
 	@echo "ags-test        Pure-module unit tests for bar/ (stock runner)"
+	@echo "app-contract-test   manifest + palette-refresh conformance for all in-tree apps"
 	@echo "gates-ci        Stock-runner subset (== CI stock jobs)"
 	@echo "typecheck       Alias for bar-typecheck"
 	@echo "test            Alias for ags-test"
@@ -118,6 +130,7 @@ ags-platform-dev:
 	fi
 	@if [ -z "$(AGS_PLATFORM_DEV)" ] && [ ! -f "$(AGS_PLATFORM_FETCH_DIR)/index.ts" ]; then \
 		echo "==> ags-platform-dev: fetching ags-platform $(AGS_PLATFORM_VERSION) (shallow, anonymous HTTPS)"; \
+		echo "    NOTE: $(AGS_PLATFORM_VERSION) is local-only in the adoption release; provide a local checkout/symlink at $(AGS_PLATFORM_FETCH_DIR) if the fetch fails."; \
 		rm -rf "$(AGS_PLATFORM_FETCH_DIR)"; \
 		mkdir -p "$$(dirname '$(AGS_PLATFORM_FETCH_DIR)')"; \
 		git clone --depth 1 --branch $(AGS_PLATFORM_VERSION) $(AGS_PLATFORM_REPO) "$(AGS_PLATFORM_FETCH_DIR)" || exit 1; \
@@ -909,4 +922,22 @@ ICME_GUARDS := icme-tests icme-drift-test
 # binary and is never a stock-runner gate.
 BTOP_GUARDS := btop-theme-studio-tests btop-theme-studio-drift-test
 
-gates-ci: ags-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS) $(ICME_GUARDS) $(BTOP_GUARDS)
+# ---------------------------------------------------------------------------
+# app-contract-test -- monorepo manifest + palette-refresh adoption gate.
+#
+# REQ-008/AD-26/AD-27/AD-36: every in-tree app declares its deployed identity
+# in app.manifest.json; every live app answers the fixed palette-refresh command
+# through the platform v0.3.0 helper; the bar stays restart without a handler;
+# and wallpaper.state is not a palette trigger. The gate also executes the
+# helper's JSON-string protocol against the contracts v0.3.0 reference.
+#
+# LOCAL-tag note: this resolves the platform through `ags-platform-dev`, whose
+# v0.3.0 pin is local-only in the adoption release. Provide the local checkout
+# at .dev/ags-platform/v0.3.0 (or AGS_PLATFORM_DEV=...). .dev/ is gitignored.
+# ---------------------------------------------------------------------------
+app-contract-test: ags-platform-dev
+	@command -v node >/dev/null || { echo "FAIL: app-contract-test: node is not on PATH" >&2; exit 1; }
+	@echo "==> app-contract-test: node --test tests/app-contract.test.mjs"
+	CONTRACTS_ROOT="$(CONTRACTS_ROOT)" node --test tests/app-contract.test.mjs
+
+gates-ci: ags-test app-contract-test $(BAR_GUARDS) $(PANO_GUARDS) $(NOTIF_GUARDS) $(CAPTURE_GUARDS) $(WALLPAPER_GUARDS) $(ICME_GUARDS) $(BTOP_GUARDS)

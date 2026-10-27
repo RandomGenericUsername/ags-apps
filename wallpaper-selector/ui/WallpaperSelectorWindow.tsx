@@ -12,12 +12,10 @@ import GdkPixbuf from "gi://GdkPixbuf?version=2.0";
 import GLib from "gi://GLib?version=2.0";
 import Pango from "gi://Pango?version=1.0";
 import { createEffect, createState } from "ags";
-// Theming through the platform Theme port (spine AD-13): the adapter owns WHICH
-// artifact is applied, so the app carries no theme.ts copy.
-import { theme } from "ags-platform/adapters/theme";
 // The ONE event client (spine AD-5): the app-local event-bus copies are gone,
 // so the selector consumes `wallpaper.state` through the platform's shared Gio
-// transport + subscribe-before-read core.
+// transport + subscribe-before-read core. The event is progress/busy status
+// only; palette application is the runtime's `palette-refresh` command (AD-27).
 import { domainEvents } from "ags-platform/adapters/event-bus";
 // The platform IconProvider (spine AD-4/AD-7): the shared registry-backed
 // provider replaces the app-local icon-registry.ts copy.
@@ -51,6 +49,17 @@ const WALLPAPER_STATE_TOPIC = "wallpaper.state";
 function hideWindow(): void {
   const window = app.get_window(WINDOW_NAME);
   if (window) window.visible = false;
+}
+
+/**
+ * Registry-backed chrome refresher, registered by the one selector window and
+ * called from the app-level `palette-refresh` handler. It re-renders only the
+ * palette-derived search icon; it never rescans, hides or rebuilds the drawer.
+ */
+let refreshChrome: (() => void) | null = null;
+
+export function refreshWallpaperSelectorChrome(): void {
+  refreshChrome?.();
 }
 
 export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
@@ -778,19 +787,16 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
     }
   }
 
-  // Live palette refresh (event-driven, no restart): the runtime skips this
-  // instance on purpose, so re-apply the generated stylesheet plus the
-  // re-rendered search icon whenever a set lands.
-  function refreshChrome(): void {
-    try {
-      theme.apply();
-    } catch (error) {
-      console.error(`wallpaper-selector: style refresh failed: ${error}`);
-    }
+  // Palette-derived chrome refresh (runtime `palette-refresh`, AD-27): the
+  // Theme pointer is applied by the app-level handler; this rebuilds the
+  // registry-backed search icon without touching the drawer or list.
+  function refreshSelectorChrome(): void {
     const old = searchRow.get_first_child();
     if (old !== null) searchRow.remove(old);
     searchRow.prepend(searchUiIcon());
   }
+
+  refreshChrome = refreshSelectorChrome;
 
   function onWallpaperEvent(payload: Record<string, unknown>): void {
     const state = payload["state"];
@@ -812,15 +818,13 @@ export function WallpaperSelectorWindow(gdkmonitor: Gdk.Monitor) {
       refreshBusy();
       invalidateContrastPrefs();
       rescan();
-      refreshChrome();
-      setStatus("wallpaper.state → done · LIVE refreshed");
+      setStatus("wallpaper.state → done");
       flushDeferredRegenerate();
     } else if (state === "error") {
       eventBusy = false;
       refreshBusy();
       invalidateContrastPrefs();
       rescan();
-      refreshChrome();
       setStatus("wallpaper.state → error");
       flushDeferredRegenerate();
     }

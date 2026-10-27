@@ -5,7 +5,11 @@ import style from "./style.css";
 // artifact is applied — the stable `colors.css` pointer, repointed on every
 // palette change — so this app no longer carries its own theme.ts copy.
 import { theme } from "ags-platform/adapters/theme";
-import { WallpaperSelectorWindow } from "./ui/WallpaperSelectorWindow";
+import { createPaletteRefreshHandler } from "ags-platform/ports/palette-refresh";
+import {
+  WallpaperSelectorWindow,
+  refreshWallpaperSelectorChrome,
+} from "./ui/WallpaperSelectorWindow";
 
 /**
  * Register one top-level window with the application.
@@ -25,6 +29,14 @@ function addWindow(element: JSX.Element): void {
 app.start({
   css: style,
   instanceName: "wallpaper-selector",
+  // The runtime is the only palette-refresh trigger (AD-27). Re-apply the Theme
+  // pointer and re-render the registry-backed search icon; the selector's
+  // drawer, query, contrast choices and in-flight apply state are untouched.
+  requestHandler: createPaletteRefreshHandler(() => {
+    theme.apply();
+    refreshWallpaperSelectorChrome();
+    return { status: "applied" };
+  }),
   main() {
     theme.apply();
     // Single centered window on the primary monitor (settings-style tool,

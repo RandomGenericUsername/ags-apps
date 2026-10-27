@@ -11,8 +11,6 @@ import { domainEvents, type DomainPayload } from "ags-platform/adapters/event-bu
 // The platform's registry-backed IconProvider (spine AD-4/AD-7) replaces the
 // app-local icon-registry.ts copy.
 import { registryProvider } from "ags-platform/adapters/icon"
-// Theming through the platform Theme port (spine AD-13).
-import { theme } from "ags-platform/adapters/theme"
 // The cards' PURE model (value formatting + stage mapping): extracted so
 // `make notifications-tests` can execute it without the desktop stack.
 import {
@@ -83,6 +81,19 @@ const SPEEDTEST_REASON_MAX_CHARS = 44
 const SPEEDTEST_NETWORK_MAX_CHARS = 30
 
 const WINDOW_NAME = "notifications-window"
+
+/**
+ * The window's card-icon refresher, registered by the one window instance and
+ * called from the app-level `palette-refresh` handler. Keeping it out of the
+ * `wallpaper.state` path is the AD-27 split: the runtime command refreshes the
+ * palette/icon cache, while the event only settles progress cards.
+ */
+let refreshCardIcons: (() => void) | null = null
+
+/** Re-resolve the wallpaper-progress card icons from the current icon manifest. */
+export function refreshNotificationCardIcons(): void {
+  refreshCardIcons?.()
+}
 
 interface CardEntry {
   id: number
@@ -351,13 +362,8 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
       setWallpaperStatus("Updating wallpaper", statusForStage(stage), stage, true)
     } else if (phase === "done") {
       wallpaperTerminal = true
-      // The palette was repointed when the wallpaper landed; re-apply the
-      // stable pointer through the Theme port so the cards pick up the new
-      // colors (the port owns WHICH artifact, AD-13).
-      try { theme.apply() } catch (error) {
-        console.error(`notifications: palette CSS apply failed: ${error}`)
-      }
-      refreshWallpaperIcon()
+      // Palette/icon application is the runtime's `palette-refresh` command
+      // (AD-27); this event only settles the progress card.
       const failures = Array.isArray(payload["reload_failures"])
         ? payload["reload_failures"].filter((item): item is string => typeof item === "string")
         : []
@@ -523,6 +529,10 @@ export function NotificationsWindow(gdkmonitor: Gdk.Monitor) {
       }
     }
   }
+
+  // The app-level palette-refresh handler reaches this window without holding
+  // a reference to it; the icon refresh never rebuilds or dismisses cards.
+  refreshCardIcons = refreshWallpaperIcon
 
   // ── Speed test ─────────────────────────────────────────────────────────
   //
