@@ -2,7 +2,7 @@
 id: EPIC-002
 title: "AGS apps as standalone repos with one palette-refresh contract"
 kind: epic
-status: in-progress
+status: done
 lane: bmad-advisory
 links:
   openspec: none
@@ -118,15 +118,15 @@ Expanded from the frontmatter:
 
 ## Children
 
-- [ ] `REQ-008` — Standalone app contract, manifests, runtime ledger, repo template and cutover fixture (`in-progress`)
-- [ ] `REQ-009` — Migrate `ags-clipboard` with full rename + live refresh (pilot) (`proposed`)
-- [ ] `REQ-010` — Migrate `btop-theme-studio` with pending-aware live refresh (`proposed`)
-- [ ] `REQ-011` — Migrate `capture-tool` with live refresh (`proposed`)
-- [ ] `REQ-012` — Migrate `notifications` (already live) (`proposed`)
-- [ ] `REQ-013` — Migrate `wallpaper-selector` (already live) (`proposed`)
-- [ ] `REQ-014` — Migrate `icme` (already live) (`proposed`)
-- [ ] `REQ-015` — Migrate `bar` last as the explicit restart app (`proposed`)
-- [ ] `REQ-016` — Final dotfiles cutover + archive `ags-apps` (`proposed`)
+- [x] `REQ-008` — Standalone app contract, manifests, runtime ledger, repo template and cutover fixture (`done`)
+- [x] `REQ-009` — Migrate `ags-clipboard` with full rename + live refresh (pilot) (`done`)
+- [x] `REQ-010` — Migrate `btop-theme-studio` with pending-aware live refresh (`done`)
+- [x] `REQ-011` — Migrate `capture-tool` with live refresh (`done`)
+- [x] `REQ-012` — Migrate `notifications` (already live) (`done`)
+- [x] `REQ-013` — Migrate `wallpaper-selector` (already live) (`done`)
+- [x] `REQ-014` — Migrate `icme` (already live) (`done`)
+- [x] `REQ-015` — Migrate `bar` last as the explicit restart app (`done`)
+- [x] `REQ-016` — Final dotfiles cutover + archive `ags-apps` (`done`)
 
 ## External dependencies
 
@@ -149,8 +149,36 @@ Expanded from the frontmatter:
 
 ## Open decisions
 
-- The REQ-009 pilot exit-gate result: if it fails, the program stops.
-- Exact `ags-platform`/`contracts`/`dotfiles-assets` program tuple tags at
-  REQ-008 release.
-- `ags-apps` archive vs deletion at REQ-016.
+- ~~The REQ-009 pilot exit-gate result: if it fails, the program stops.~~ Passed;
+  `ags-clipboard` shipped as `v0.1.0` and the remaining six followed.
+- ~~Exact `ags-platform`/`contracts`/`dotfiles-assets` program tuple tags at
+  REQ-008 release.~~ Resolved: `ags-platform v0.3.0`, `contracts v0.3.0`,
+  `dotfiles-assets v0.6.2`.
+- ~~`ags-apps` archive vs deletion at REQ-016.~~ Resolved: archived on GitHub
+  (`RandomGenericUsername/ags-apps`, `isArchived: true`); its tree is retained as
+  read-only history.
 - Bar live refresh is a future iteration; restart is the current explicit mode.
+
+## Closeout evidence (2026-10-28)
+
+All nine children are `done` and the done-when holds on the final state:
+
+- **Seven standalone repos, annotated tags:** `ags-bar` `v0.1.3`;
+  `ags-notifications`, `ags-capture-tool`, `ags-clipboard`,
+  `ags-wallpaper-selector`, `ags-icme`, `ags-btop-theme-studio` `v0.1.0`
+  (`git cat-file -t <tag>` → `tag` in each repo).
+- **One app list / one tuple:** `dotfiles-v3/dotfiles/provisioning/apps.yaml`
+  pins all seven `owner: standalone`; `program-tuple.yaml` is
+  `ags-platform v0.3.0`, `contracts v0.3.0`, `dotfiles-assets v0.6.2`.
+- **Consumers:** engine `v0.1.24` (`installer.pin`), runtime `v0.3.0`; the
+  `ags_apps` monorepo role/pin is gone.
+- **Host:** `dotfiles-provision verify` → exit 0 (`returncode: 0`,
+  install `~/.local/share/dotfiles`); no `<install>/ags-apps` unit or link and
+  no `hypr-pano` config/state/cache.
+- **Refresh evidence:** v3 OpenSpec tasks 4.2 — no-op run `20261028T220521Z`
+  refreshed/restarted nothing; changed-appearance run `20261028T220612Z` followed
+  each mode (bar restart exit 0, notifications live `{"ok":true}`, 0 failures).
+- **Archive:** `RandomGenericUsername/ags-apps` → `isArchived: true`; the tree is
+  read-only history, not a deployed unit.
+
+Verify: `cd dotfiles-v3 && make deploy-coverage && dotfiles-provision verify`.

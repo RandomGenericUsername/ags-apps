@@ -2,7 +2,7 @@
 id: REQ-008
 title: "Standalone app contract, manifests, runtime ledger, repo template and cutover fixture"
 kind: requirement
-status: in-progress
+status: done
 lane: 4
 links:
   openspec: none
@@ -50,23 +50,23 @@ This child does not migrate an app repo.
 
 - [x] The architecture spine is final and linked (`bmad:` above); its AD-25…AD-37
       are the contract.
-- [ ] `contracts` carries the manifest schema, app-list schema,
+- [x] `contracts` carries the manifest schema, app-list schema,
       `palette-refresh` request/response protocol, runtime result/log schema,
       and the corrected `wallpaper.state` description.
-- [ ] `ags-platform` carries the manifest helper/types and the one-provider
+- [x] `ags-platform` carries the manifest helper/types and the one-provider
       Theme replacement; the provider fix is proven before live refresh.
-- [ ] The runtime discovery/identity rule is implemented and tested:
+- [x] The runtime discovery/identity rule is implemented and tested:
       every deployed link is enumerated, invalid/missing manifests are
       structured failures, foreign/dev name owners are conflicts, no
       wrong-instance refresh, configured restart apps are included when down.
-- [ ] The applied-appearance ledger (`applied|deferred|failed|skipped`), operation
+- [x] The applied-appearance ledger (`applied|deferred|failed|skipped`), operation
       lock, parallel live lane, serialized restart lane, shared launch lock and
       structured logs are implemented and tested.
-- [ ] Live response handling covers applied, deferred and retryable failure; the
+- [x] Live response handling covers applied, deferred and retryable failure; the
       ledger retries deferred/failed apps on the next trigger.
-- [ ] The clipboard daemon config/state/cache paths have a one-time migration
+- [x] The clipboard daemon config/state/cache paths have a one-time migration
       from the old `hypr-pano` paths.
-- [ ] The program tuple is released and pinned in `program-tuple.yaml`:
+- [x] The program tuple is released and pinned in `program-tuple.yaml`:
       `ags-platform`, `contracts` and `dotfiles-assets`; the record is validated
       by a schema in `contracts` and consumed by the installer. Every app repo and
       the current monorepo use it. The current monorepo is re-pinned and released
@@ -79,16 +79,16 @@ This child does not migrate an app repo.
       `app.manifest.json`; notifications, capture-tool, hypr-pano,
       wallpaper-selector, icme and btop-theme-studio answer `palette-refresh`
       through `createPaletteRefreshHandler`; the bar has no palette handler.
-- [ ] `dotfiles-v3` has one app list with a schema, `owner`, `installDir`,
+- [x] `dotfiles-v3` has one app list with a schema, `owner`, `installDir`,
       identity, spine/XDG/bin links, launcher, autostart, launch policy and
       palette metadata; `dotfiles-provision` has the generic loop, owner filters,
       verify mirror, quiesce/stop/start and tag immutability.
-- [ ] A fake-app cutover fixture proves quiesce → owner flip → install/start →
+- [x] A fake-app cutover fixture proves quiesce → owner flip → install/start →
       verify, rollback, and no duplicate/missing ownership surface.
-- [ ] The template fixture (`templates/ags-app/`), template-conformance gate and
+- [x] The template fixture (`templates/ags-app/`), template-conformance gate and
       pilot exit-gate thresholds are defined; the pilot (`ags-clipboard`) uses
       the fixture.
-- [ ] No production app repo is cut over by this child.
+- [x] No production app repo is cut over by this child.
 
 ## Monorepo adoption release (`v0.5.0`)
 
@@ -176,3 +176,27 @@ current monorepo, before any app repo cutover:
   (local symlink to the `ags-platform` v0.3.0 checkout).
 - Release: annotated tag `v0.5.0` on `main`; `git cat-file -t v0.5.0` → `tag`.
   Local-only: no push/publication in this run.
+
+## Closeout evidence (2026-10-28)
+
+The contract is released and consumed; the child did not move an app repo (that
+was REQ-009…REQ-015).
+
+- **Tuple/schemas:** `contracts v0.3.0` (manifest, app-list, program-tuple,
+  runtime result/log schemas + `palette-refresh` protocol) and `ags-platform
+  v0.3.0` (manifest helper/types + one-provider Theme) are the program tuple,
+  pinned in `dotfiles-v3/dotfiles/provisioning/program-tuple.yaml`.
+- **Consumers:** `dotfiles-runtime v0.3.0` (manifest discovery/identity,
+  applied-appearance ledger, operation lock, parallel live lane, serialized
+  restart lane, `hypr-pano` → `clipboard` one-time data migration); engine
+  `v0.1.24` (generic `ags_apps_units` loop, owner filters, quiesce/stop/start,
+  verify mirror, tag immutability, 7-app cutover fixture).
+- **Composition:** `dotfiles-v3/dotfiles/provisioning/apps.yaml` is the one list
+  (7 entries, `owner: standalone`); `make deploy-coverage` → PASS.
+- **Host:** `dotfiles-provision verify` → exit 0 (`returncode: 0`,
+  `~/.local/share/dotfiles`); no `hypr-pano` config/state/cache.
+- **Adoption then extraction:** monorepo `v0.5.0` carried manifests + handlers
+  (bar `restart`, no palette handler); the seven apps then shipped standalone —
+  `ags-bar v0.1.3`, the other six `v0.1.0`.
+
+Verify: `cd dotfiles-v3 && make deploy-coverage && dotfiles-provision verify`.

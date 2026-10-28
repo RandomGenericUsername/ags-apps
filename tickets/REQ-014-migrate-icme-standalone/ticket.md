@@ -2,7 +2,7 @@
 id: REQ-014
 title: "Migrate icme to ags-icme (already live)"
 kind: requirement
-status: proposed
+status: done
 lane: 3
 links:
   openspec: none
@@ -26,16 +26,16 @@ restarted.
 
 ## Acceptance
 
-- [ ] Repo is created from the template, tagged, and builds against the program
+- [x] Repo is created from the template, tagged, and builds against the program
       `ags-platform`/`contracts` tuple with template conformance.
-- [ ] Manifest identity is `icme` / `icon-color-mapping-editor` / `ags-icme`,
+- [x] Manifest identity is `icme` / `icon-color-mapping-editor` / `ags-icme`,
       `mode: live`, unsaved state true.
-- [ ] `palette-refresh` preserves pending edits and only rebuilds the show when
+- [x] `palette-refresh` preserves pending edits and only rebuilds the show when
       the scheme fingerprint changes.
-- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+- [x] The cutover flips the app list entry from `legacy` to `standalone`, stops
       the old instance, repoints the link, starts the new instance and verifies
       one owner.
-- [ ] Old source is removed from `ags-apps`; docs record the new pin.
+- [x] Old source is removed from `ags-apps`; docs record the new pin.
 
 ## Dependencies
 
@@ -49,3 +49,21 @@ restarted.
 - `icme/ui/EditorWindow.tsx` live handler, fingerprint and map handler.
 - `icme/app.tsx` startup theme.
 - `tickets/SPIKE-001-ags-refresh-patterns/ticket.md` ICME row.
+
+## Closeout evidence (2026-10-28)
+
+- **Repo/tag:** `ags-icme` `v0.1.0` (annotated); manifest `icme` /
+  `icon-color-mapping-editor` / `ags-icme` / `live` /
+  `holdsUnsavedState: true`.
+- **Pin:** `dotfiles-v3/dotfiles/provisioning/apps.yaml` —
+  `installDir: icme`, `owner: standalone`, launcher
+  `icon-color-mapping-editor`, `launch: on-demand`, `cutoverId: REQ-014`.
+- **Live refresh:** palette re-applied and the show rebuilt only when the scheme
+  fingerprint moved; pending/staging maps preserved; never restarted.
+- **Program state:** tuple `ags-platform v0.3.0` / `contracts v0.3.0` /
+  `dotfiles-assets v0.6.2`; runtime `v0.3.0`; engine `v0.1.24`;
+  `dotfiles-provision verify` → exit 0; no host `ags-apps`;
+  `RandomGenericUsername/ags-apps` archived (historical tree retained read-only, never deployed).
+
+Verify: `git -C ags-icme describe --tags --exact-match` → `v0.1.0`;
+`cd dotfiles-v3 && make deploy-coverage`.

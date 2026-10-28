@@ -2,7 +2,7 @@
 id: REQ-011
 title: "Migrate capture-tool to ags-capture-tool with live refresh"
 kind: requirement
-status: proposed
+status: done
 lane: 3
 links:
   openspec: none
@@ -27,17 +27,17 @@ busy result; it must never restart the process.
 
 ## Acceptance
 
-- [ ] Repo is created from the template, tagged, and builds against the program
+- [x] Repo is created from the template, tagged, and builds against the program
       `ags-platform`/`contracts` tuple with template conformance.
-- [ ] Manifest identity is `capture` / `ags-capture`, `mode: live`, no unsaved
+- [x] Manifest identity is `capture` / `ags-capture`, `mode: live`, no unsaved
       state.
-- [ ] `palette-refresh` reloads icons/windows without a process restart and
+- [x] `palette-refresh` reloads icons/windows without a process restart and
       without closing the active surface; a fake runtime test covers the busy
       path.
-- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+- [x] The cutover flips the app list entry from `legacy` to `standalone`, stops
       the old instance, repoints the link, starts the new instance and verifies
       one owner; capture's bin link remains correct.
-- [ ] Old source is removed from `ags-apps`; docs record the new pin.
+- [x] Old source is removed from `ags-apps`; docs record the new pin.
 
 ## Dependencies
 
@@ -52,3 +52,20 @@ busy result; it must never restart the process.
 - `capture-tool/ui/shared/icons.ts` generated icons built into widgets.
 - `capture-tool/ui/classic/SettingsPage.tsx` immediate settings persistence.
 - `tickets/SPIKE-001-ags-refresh-patterns/ticket.md` capture row.
+
+## Closeout evidence (2026-10-28)
+
+- **Repo/tag:** `ags-capture-tool` `v0.1.0` (annotated); manifest `capture` /
+  `capture` / `ags-capture` / `live` / `holdsUnsavedState: false`.
+- **Pin:** `dotfiles-v3/dotfiles/provisioning/apps.yaml` —
+  `installDir: capture`, `owner: standalone`, `binLink: capture-tool`, launcher
+  `capture-ui`, autostart `capture`, `launch: on-demand`, `cutoverId: REQ-011`.
+- **Live refresh:** icons/windows reload in place without a restart or closing
+  the active capture/settings surface.
+- **Program state:** tuple `ags-platform v0.3.0` / `contracts v0.3.0` /
+  `dotfiles-assets v0.6.2`; runtime `v0.3.0`; engine `v0.1.24`;
+  `dotfiles-provision verify` → exit 0; no host `ags-apps`;
+  `RandomGenericUsername/ags-apps` archived (historical tree retained read-only, never deployed).
+
+Verify: `git -C ags-capture-tool describe --tags --exact-match` → `v0.1.0`;
+`cd dotfiles-v3 && make deploy-coverage`.

@@ -2,7 +2,7 @@
 id: REQ-009
 title: "Migrate the clipboard app to ags-clipboard with full rename + live refresh (pilot)"
 kind: requirement
-status: proposed
+status: done
 lane: 3
 links:
   openspec: none
@@ -47,21 +47,21 @@ A wallpaper change must not restart the process.
 
 ## Acceptance
 
-- [ ] The pilot repo is created from the REQ-008 template fixture with AGENTS,
+- [x] The pilot repo is created from the REQ-008 template fixture with AGENTS,
       tickets (LIFECYCLE/INDEX/_template), worktree guard, Makefile, CI, README,
       manifest, handler, `templates/ags-app/` and tests.
-- [ ] Repo is tagged; the app builds against the program
+- [x] Repo is tagged; the app builds against the program
       `ags-platform`/`contracts` tuple and passes template conformance.
-- [ ] `app.manifest.json` has the identity tuple
+- [x] `app.manifest.json` has the identity tuple
       (`clipboard` / `ags-clipboard` / `live` / no unsaved state) and the
       identity equals `app.tsx` + `ags list` + the deployed link basename.
-- [ ] `palette-refresh` uses a single JSON-encoded string response, is
+- [x] `palette-refresh` uses a single JSON-encoded string response, is
       idempotent by appearance hash, and preserves overlay state.
-- [ ] No `hypr-pano` app/config/window/launcher/keybind name remains; the
+- [x] No `hypr-pano` app/config/window/launcher/keybind name remains; the
       daemon's old data paths are migrated once and the new paths are used.
-- [ ] `dotfiles-assets` autostart/keybind and the provisioned launcher use
+- [x] `dotfiles-assets` autostart/keybind and the provisioned launcher use
       `ags-clipboard` / `clipboard-ui`.
-- [ ] The cutover quiesces the old instance, flips the app list entry from
+- [x] The cutover quiesces the old instance, flips the app list entry from
       `legacy` to `standalone`, installs/starts the new instance, and verifies
       every app-list ownership surface (install dir, spine/XDG/bin links,
       launcher, autostart, process, D-Bus name).
@@ -70,9 +70,15 @@ A wallpaper change must not restart the process.
       rollback ≤ 2 min each, zero duplicate/missing ownership surfaces, no
       unnecessary restart, no bespoke provisioning code. If the gate fails, the
       program stops.
-- [ ] The old source is deleted from `ags-apps`; the old role has one fewer
+      **Open evidence item:** the pilot cleared operationally (the program went on
+      to ship all seven repos) but no per-step timing record was captured, so
+      this box stays unticked rather than claiming measurements that do not
+      exist. Everything else in the gate (zero duplicate/missing surfaces, no
+      unnecessary restart, no bespoke provisioning code) is covered by
+      `deploy-coverage` + `verify` below.
+- [x] The old source is deleted from `ags-apps`; the old role has one fewer
       `legacy` entry.
-- [ ] `ags bundle`, typecheck (local), pure tests, manifest conformance and the
+- [x] `ags bundle`, typecheck (local), pure tests, manifest conformance and the
       one-owner cutover gate pass.
 
 ## Dependencies
@@ -92,3 +98,24 @@ A wallpaper change must not restart the process.
   `json_history_store.py` (old data paths).
 - `dotfiles-assets/configs/hypr/autostart.lua` (old launch path).
 - `tickets/SPIKE-001-ags-refresh-patterns/ticket.md` clipboard row.
+
+## Closeout evidence (2026-10-28)
+
+- **Repo/tag:** `ags-clipboard` `v0.1.0` (annotated); manifest
+  `clipboard` / `clipboard` / `ags-clipboard` / `live` /
+  `holdsUnsavedState: false`.
+- **Pin:** `dotfiles-v3/dotfiles/provisioning/apps.yaml` —
+  `installDir: clipboard`, `owner: standalone`, launcher `clipboard-ui`,
+  autostart `clipboard`, `launch: on-demand`, `cutoverId: REQ-009`.
+- **Rename/migration:** no `hypr-pano` app/config/window/launcher remains in the
+  repo; `dotfiles-runtime v0.3.0` migrated history once to the `clipboard`
+  namespace (`~/.local/state/clipboard/history.json`) and the old
+  `~/.config|~/.local/state|~/.cache/hypr-pano` paths are absent on the host.
+- **Program state:** tuple `ags-platform v0.3.0` / `contracts v0.3.0` /
+  `dotfiles-assets v0.6.2`; engine `v0.1.24`; `dotfiles-provision verify` →
+  exit 0; no host `ags-apps` unit; `RandomGenericUsername/ags-apps` archived (historical tree retained read-only, never deployed).
+- **Pilot gate:** cleared operationally (the program shipped the remaining six
+  repos); per-step timing was not recorded — see the open box above.
+
+Verify: `git -C ags-clipboard describe --tags --exact-match` → `v0.1.0`;
+`cd dotfiles-v3 && make deploy-coverage`.

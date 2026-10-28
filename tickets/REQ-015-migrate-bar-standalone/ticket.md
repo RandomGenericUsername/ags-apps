@@ -2,7 +2,7 @@
 id: REQ-015
 title: "Migrate bar to ags-bar, last, as the explicit restart app"
 kind: requirement
-status: proposed
+status: done
 lane: 4
 links:
   openspec: none
@@ -39,27 +39,27 @@ Before the bar cutover:
 
 ## Acceptance
 
-- [ ] Repo is created from the template, tagged, and builds against the program
+- [x] Repo is created from the template, tagged, and builds against the program
       `ags-platform`/`contracts` tuple with template conformance.
-- [ ] Deployment still links `config/ags` to the bar checkout and uses instance
+- [x] Deployment still links `config/ags` to the bar checkout and uses instance
       `ags`.
-- [ ] Manifest identity is `bar` / `ags` / `ags`, `mode: restart`, no unsaved
+- [x] Manifest identity is `bar` / `ags` / `ags`, `mode: restart`, no unsaved
       state.
-- [ ] Restart uses the safe serialized procedure; the configured bar is included
+- [x] Restart uses the safe serialized procedure; the configured bar is included
       even when down, so a failed restart is recoverable; no no-op restart; a
       failed restart is recorded and retried by the ledger on the next trigger.
-- [ ] The bar manifest is adopted before the runtime switch; the current
+- [x] The bar manifest is adopted before the runtime switch; the current
       deployment is not left without a manifest.
-- [ ] `wifi-speedtest*.json` and other writable state live outside the immutable
+- [x] `wifi-speedtest*.json` and other writable state live outside the immutable
       tag and survive a tag bump; `colors.css` points to a stable runtime pointer
       outside the tag; `icons.json` has one producer and provisioning only
       verifies it.
-- [ ] Every `ags run` path (restart, autostart, on-demand launcher) holds the
+- [x] Every `ags run` path (restart, autostart, on-demand launcher) holds the
       shared launch lock.
-- [ ] The cutover flips the app list entry from `legacy` to `standalone`, stops
+- [x] The cutover flips the app list entry from `legacy` to `standalone`, stops
       the old instance, repoints `config/ags`, starts the new instance and
       verifies one owner.
-- [ ] Old source is removed from `ags-apps`; docs record the new pin and the
+- [x] Old source is removed from `ags-apps`; docs record the new pin and the
       restart rationale.
 
 ## Dependencies
@@ -77,3 +77,26 @@ Before the bar cutover:
 - `bar/kit/widget.tsx` icon loading.
 - `bar/services/speedtest-service.ts` in-tag writable state.
 - `tickets/SPIKE-001-ags-refresh-patterns/ticket.md` bar row.
+
+## Closeout evidence (2026-10-28)
+
+- **Repo/tag:** `ags-bar` `v0.1.3` (annotated); manifest `bar` / `ags` / `ags` /
+  `restart` / `holdsUnsavedState: false`.
+- **Pin:** `dotfiles-v3/dotfiles/provisioning/apps.yaml` — `installDir: bar`,
+  `owner: standalone`, `barPalettePointer: true`, autostart `ags`,
+  `launch: always`, `cutoverId: REQ-015`; `config/ags` still links the bar
+  checkout and the instance stays `ags`.
+- **Writable state/pointer:** `wifi-speedtest*.json` lives in
+  `~/.local/state/ags/` outside the tag; `colors.css` is the runtime-owned
+  pointer (`barPalettePointer` verified by the engine); `icons.json` has one
+  producer.
+- **Restart lane:** serialized/safe restart with the shared launch lock; the
+  changed-appearance run restarted the bar (`exit 0`, PID `2184833→2260506`)
+  while the no-op run restarted nothing (v3 tasks 4.2).
+- **Program state:** tuple `ags-platform v0.3.0` / `contracts v0.3.0` /
+  `dotfiles-assets v0.6.2`; runtime `v0.3.0`; engine `v0.1.24`;
+  `dotfiles-provision verify` → exit 0; no host `ags-apps`;
+  `RandomGenericUsername/ags-apps` archived (historical tree retained read-only, never deployed).
+
+Verify: `git -C ags-bar describe --tags --exact-match` → `v0.1.3`;
+`cd dotfiles-v3 && make deploy-coverage`.
